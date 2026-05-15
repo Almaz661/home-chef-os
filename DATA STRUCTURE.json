@@ -1,0 +1,756 @@
+{
+  "homeChefOS": {
+    "version": "1.0",
+    "systemCore": {
+      "description": "Kitchen Operating System for Home Chef",
+      "language": ["Russian", "English", "Dutch"],
+      "currencies": ["EUR", "RUB", "USD"],
+      "architectureFlow": "PRODUCT_MASTER → INVENTORY → RECIPES → MENU → SHOPPING → RECEIPTS → ANALYTICS"
+    }
+  },
+
+  "productMaster": {
+    "description": "Central database of all products. Immutable Product IDs.",
+    "fields": {
+      "productId": {
+        "type": "string",
+        "format": "[CATEGORY]-[SUBCATEGORY]-[NUMBER]",
+        "example": "ML-CR-001",
+        "immutable": true,
+        "description": "Never changes, basis of entire system"
+      },
+      "russianName": {
+        "type": "string",
+        "example": "Сливки 33%",
+        "required": true
+      },
+      "englishName": {
+        "type": "string",
+        "example": "Cream 33%"
+      },
+      "originalName": {
+        "type": "string",
+        "example": "Slagroom",
+        "description": "Original name from supplier country (Dutch for Netherlands)"
+      },
+      "category": {
+        "type": "string",
+        "enum": ["ML", "VG", "MT", "PA", "DK", "FR"],
+        "example": "ML",
+        "description": "Product category code"
+      },
+      "subcategory": {
+        "type": "string",
+        "example": "CR",
+        "description": "Subcategory within category"
+      },
+      "baseUnit": {
+        "type": "string",
+        "enum": ["g", "kg", "ml", "l", "oz", "lb", "piece", "dozen", "cup", "tbsp", "tsp"],
+        "example": "ml",
+        "description": "Standard unit for this product"
+      },
+      "storageType": {
+        "type": "string",
+        "enum": ["Refrigerated", "Frozen", "Room Temperature", "Dark Place", "Cool Dry"],
+        "example": "Refrigerated"
+      },
+      "shelfLife": {
+        "type": "integer",
+        "unit": "days",
+        "example": 10,
+        "description": "Shelf life when sealed/closed"
+      },
+      "openShelfLife": {
+        "type": "integer",
+        "unit": "days",
+        "example": 3,
+        "description": "Shelf life after opening"
+      },
+      "minimumStock": {
+        "type": "number",
+        "example": 500,
+        "description": "Minimum quantity to maintain in base units"
+      },
+      "defaultCurrency": {
+        "type": "string",
+        "example": "EUR",
+        "description": "Currency where product is typically purchased"
+      },
+      "averagePrice": {
+        "type": "number",
+        "example": 2.49,
+        "description": "Average price for one base unit"
+      },
+      "supplier": {
+        "type": "string",
+        "example": "Albert Heijn",
+        "description": "Default supplier/store"
+      },
+      "active": {
+        "type": "boolean",
+        "default": true,
+        "description": "Is product currently in use?"
+      }
+    },
+
+    "categories": {
+      "ML": {
+        "name": "Молочные",
+        "icon": "🥛",
+        "subcategories": {
+          "CR": "Сливки",
+          "YG": "Йогурт",
+          "CH": "Сыр",
+          "MK": "Молоко"
+        }
+      },
+      "VG": {
+        "name": "Овощи",
+        "icon": "🥬",
+        "subcategories": {
+          "TM": "Томаты",
+          "PP": "Перец",
+          "ON": "Лук",
+          "GB": "Зелень"
+        }
+      },
+      "MT": {
+        "name": "Мясо & Рыба",
+        "icon": "🥩",
+        "subcategories": {
+          "CH": "Курица",
+          "BF": "Говядина",
+          "FH": "Рыба",
+          "SF": "Морепродукты"
+        }
+      },
+      "PA": {
+        "name": "Панир & Основы",
+        "icon": "🍝",
+        "subcategories": {
+          "OL": "Масла",
+          "BR": "Крупы",
+          "PS": "Паста",
+          "SL": "Соль & Специи"
+        }
+      },
+      "DK": {
+        "name": "Напитки",
+        "icon": "🥤",
+        "subcategories": {
+          "WT": "Вода",
+          "CF": "Кофе",
+          "TE": "Чай"
+        }
+      },
+      "FR": {
+        "name": "Фрукты",
+        "icon": "🍎",
+        "subcategories": {
+          "AP": "Яблоки",
+          "OR": "Апельсины",
+          "BR": "Ягоды"
+        }
+      }
+    },
+
+    "example": {
+      "productId": "ML-CR-001",
+      "russianName": "Сливки 33%",
+      "englishName": "Cream 33%",
+      "originalName": "Slagroom",
+      "category": "ML",
+      "subcategory": "CR",
+      "baseUnit": "ml",
+      "storageType": "Refrigerated",
+      "shelfLife": 10,
+      "openShelfLife": 3,
+      "minimumStock": 500,
+      "defaultCurrency": "EUR",
+      "averagePrice": 2.49,
+      "supplier": "Albert Heijn",
+      "active": true,
+      "createdAt": "2024-01-01T10:00:00Z",
+      "updatedAt": "2024-01-15T14:30:00Z"
+    }
+  },
+
+  "inventory": {
+    "description": "Separate system for current stock. NOT part of Product Master.",
+    "fields": {
+      "inventoryId": {
+        "type": "string",
+        "format": "INV-YYYYMMDD-LOCATION-PRODUCTCODE",
+        "example": "INV-001",
+        "description": "Unique inventory item identifier"
+      },
+      "productId": {
+        "type": "string",
+        "example": "ML-CR-001",
+        "description": "Link to Product Master via Product ID"
+      },
+      "quantity": {
+        "type": "number",
+        "example": 500,
+        "description": "Current quantity"
+      },
+      "unit": {
+        "type": "string",
+        "example": "ml",
+        "description": "Measurement unit (should match Product baseUnit)"
+      },
+      "location": {
+        "type": "string",
+        "enum": ["Refrigerator", "Freezer", "Pantry", "Prep", "Ready Meals"],
+        "example": "Refrigerator",
+        "description": "Where item is stored"
+      },
+      "purchaseDate": {
+        "type": "date",
+        "example": "2024-01-15",
+        "description": "When was item purchased"
+      },
+      "expirationDate": {
+        "type": "date",
+        "example": "2024-01-25",
+        "description": "When item expires"
+      },
+      "openDate": {
+        "type": "date|null",
+        "example": null,
+        "description": "When item was opened (null if not opened)"
+      },
+      "status": {
+        "type": "string",
+        "enum": ["Fresh", "Opened", "Frozen", "Defrosting", "Defrosted", "Expiring Soon", "Expired"],
+        "example": "Fresh",
+        "description": "Current status of item"
+      },
+      "batch": {
+        "type": "string|null",
+        "example": "BATCH-001",
+        "description": "Batch/lot number from receipt"
+      },
+      "costPerUnit": {
+        "type": "number",
+        "example": 2.49,
+        "description": "Cost per unit"
+      },
+      "currency": {
+        "type": "string",
+        "example": "EUR"
+      },
+      "costTotal": {
+        "type": "number",
+        "example": 1245.00,
+        "description": "quantity * costPerUnit"
+      },
+      "notes": {
+        "type": "string",
+        "example": "From Albert Heijn, Amsterdam"
+      }
+    },
+
+    "statuses": {
+      "Fresh": "New, unopened product",
+      "Opened": "In use, within open shelf life",
+      "Frozen": "In freezer, not thawed",
+      "Defrosting": "In process of thawing",
+      "Defrosted": "Fully thawed",
+      "Expiring Soon": "Days to expiration < 2",
+      "Expired": "Past expiration date"
+    },
+
+    "locations": {
+      "Refrigerator": { "icon": "🧊", "temperature": "0-4°C" },
+      "Freezer": { "icon": "❄️", "temperature": "-18°C" },
+      "Pantry": { "icon": "🗄️", "temperature": "Room Temp" },
+      "Prep": { "icon": "🍳", "temperature": "Room Temp", "purpose": "Current ingredients" },
+      "Ready Meals": { "icon": "📦", "purpose": "Prepared dishes" }
+    },
+
+    "example": {
+      "inventoryId": "INV-001",
+      "productId": "ML-CR-001",
+      "quantity": 500,
+      "unit": "ml",
+      "location": "Refrigerator",
+      "purchaseDate": "2024-01-15",
+      "expirationDate": "2024-01-25",
+      "openDate": null,
+      "status": "Fresh",
+      "batch": "BATCH-123",
+      "costPerUnit": 2.49,
+      "currency": "EUR",
+      "costTotal": 1245.00,
+      "notes": "From Albert Heijn",
+      "createdAt": "2024-01-15T14:30:00Z"
+    }
+  },
+
+  "recipes": {
+    "description": "Recipes using Product IDs (not specific products). Links through Product ID.",
+    "fields": {
+      "recipeId": {
+        "type": "string",
+        "format": "RCP-###",
+        "example": "RCP-001"
+      },
+      "name": {
+        "type": "string",
+        "example": "Помидоры с чесноком"
+      },
+      "cuisineType": {
+        "type": "string",
+        "example": "Italian"
+      },
+      "difficulty": {
+        "type": "string",
+        "enum": ["Easy", "Medium", "Hard"],
+        "example": "Easy"
+      },
+      "prepTime": {
+        "type": "integer",
+        "unit": "minutes",
+        "example": 5
+      },
+      "cookTime": {
+        "type": "integer",
+        "unit": "minutes",
+        "example": 15
+      },
+      "servings": {
+        "type": "integer",
+        "example": 4,
+        "description": "Default number of servings"
+      },
+      "ingredients": {
+        "type": "array",
+        "items": {
+          "productId": "string (link to Product Master)",
+          "quantity": "number",
+          "unit": "string",
+          "notes": "string"
+        },
+        "example": [
+          {
+            "productId": "VG-TM-001",
+            "quantity": 500,
+            "unit": "g",
+            "notes": "нарезать"
+          },
+          {
+            "productId": "PA-OL-001",
+            "quantity": 50,
+            "unit": "ml",
+            "notes": ""
+          }
+        ],
+        "description": "CRITICAL: References Product ID, not specific product!"
+      },
+      "instructions": {
+        "type": "array",
+        "items": {
+          "step": "integer",
+          "text": "string"
+        }
+      },
+      "tags": {
+        "type": "array",
+        "example": ["quick", "vegetarian", "summer"]
+      },
+      "source": {
+        "type": "string",
+        "example": "Own recipe / Website / Book"
+      },
+      "active": {
+        "type": "boolean",
+        "default": true
+      }
+    },
+
+    "example": {
+      "recipeId": "RCP-001",
+      "name": "Помидоры с чесноком",
+      "cuisineType": "Italian",
+      "difficulty": "Easy",
+      "prepTime": 5,
+      "cookTime": 15,
+      "servings": 4,
+      "ingredients": [
+        {
+          "productId": "VG-TM-001",
+          "quantity": 500,
+          "unit": "g",
+          "notes": "нарезать"
+        },
+        {
+          "productId": "PA-OL-001",
+          "quantity": 50,
+          "unit": "ml"
+        }
+      ],
+      "instructions": [
+        {
+          "step": 1,
+          "text": "Нагреть масло на высокой температуре"
+        },
+        {
+          "step": 2,
+          "text": "Добавить нарезанные помидоры"
+        }
+      ],
+      "tags": ["quick", "vegetarian"],
+      "source": "Own",
+      "active": true
+    }
+  },
+
+  "menu": {
+    "description": "Menu generated from available inventory. Smart use of expiring products.",
+    "fields": {
+      "menuId": {
+        "type": "string",
+        "format": "MNU-YYYYMMDD-###",
+        "example": "MNU-20240115-001"
+      },
+      "date": {
+        "type": "date",
+        "example": "2024-01-15"
+      },
+      "meals": {
+        "type": "array",
+        "items": {
+          "mealType": "string (breakfast, lunch, dinner, snack)",
+          "recipes": "array of recipe IDs"
+        }
+      },
+      "reservedInventory": {
+        "type": "array",
+        "description": "Products reserved for this menu",
+        "items": {
+          "inventoryId": "string",
+          "quantity": "number",
+          "unit": "string",
+          "recipe": "string (recipe ID)"
+        }
+      },
+      "shoppingNeeded": {
+        "type": "array",
+        "description": "Products needed to complete menu",
+        "items": {
+          "productId": "string",
+          "quantity": "number",
+          "unit": "string"
+        }
+      }
+    },
+
+    "generationLogic": {
+      "step1": "Scan current Inventory",
+      "step2": "Find recipes that can be made",
+      "step3": "Prioritize by: expiring soon > old items > open items",
+      "step4": "Generate recommended menu",
+      "step5": "Reserve products",
+      "step6": "Create Shopping List from shortages"
+    },
+
+    "example": {
+      "menuId": "MNU-20240115-001",
+      "date": "2024-01-15",
+      "meals": [
+        {
+          "mealType": "breakfast",
+          "recipes": ["RCP-003", "RCP-004"]
+        },
+        {
+          "mealType": "lunch",
+          "recipes": ["RCP-005"]
+        },
+        {
+          "mealType": "dinner",
+          "recipes": ["RCP-001"]
+        }
+      ],
+      "reservedInventory": [
+        {
+          "inventoryId": "INV-001",
+          "quantity": 500,
+          "unit": "ml",
+          "recipe": "RCP-001"
+        }
+      ],
+      "shoppingNeeded": [
+        {
+          "productId": "VG-PP-001",
+          "quantity": 500,
+          "unit": "g"
+        }
+      ],
+      "createdAt": "2024-01-15T08:00:00Z"
+    }
+  },
+
+  "shopping": {
+    "description": "Shopping list automatically generated from menu, low stock, and expiring items.",
+    "sources": [
+      "Menu Shortages - missing ingredients for menu",
+      "Low Stock - items below minimum stock threshold",
+      "Expiring Soon - items about to expire"
+    ],
+    "fields": {
+      "shoppingId": {
+        "type": "string",
+        "format": "SHP-YYYYMMDD-###"
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "productId": "string",
+          "quantity": "number",
+          "unit": "string",
+          "estimatedPrice": "number",
+          "currency": "string",
+          "source": "enum: menu_shortage, low_stock, expiring",
+          "priority": "integer (1=highest)",
+          "notes": "string"
+        }
+      },
+      "totalEstimated": {
+        "type": "number",
+        "description": "Sum of all items"
+      }
+    },
+
+    "example": {
+      "shoppingId": "SHP-20240115-001",
+      "items": [
+        {
+          "productId": "VG-PP-001",
+          "quantity": 500,
+          "unit": "g",
+          "estimatedPrice": 3.50,
+          "currency": "EUR",
+          "source": "menu_shortage",
+          "recipe": "RCP-001",
+          "priority": 1,
+          "notes": "For today's menu"
+        },
+        {
+          "productId": "PA-OL-001",
+          "quantity": 500,
+          "unit": "ml",
+          "estimatedPrice": 8.99,
+          "currency": "EUR",
+          "source": "low_stock",
+          "currentStock": 50,
+          "minimumStock": 250,
+          "priority": 2,
+          "notes": "Low inventory"
+        }
+      ],
+      "totalEstimated": 12.49,
+      "currency": "EUR",
+      "prioritized": true
+    }
+  },
+
+  "receipts": {
+    "description": "Scanned receipts from stores (especially Netherlands). Auto-converts Dutch→Russian, EUR→RUB.",
+    "fields": {
+      "receiptId": {
+        "type": "string",
+        "format": "REC-YYYYMMDD-###"
+      },
+      "date": { "type": "date" },
+      "time": { "type": "time" },
+      "store": { "type": "string", "example": "Albert Heijn Amsterdam" },
+      "items": {
+        "type": "array",
+        "items": {
+          "originalName": "string (Dutch)",
+          "quantity": "number",
+          "unit": "string",
+          "unitPrice": "number",
+          "totalPrice": "number",
+          "currency": "string",
+          "russianName": "string (auto-translated)",
+          "englishName": "string",
+          "matchedProductId": "string (found in Product Master)",
+          "confidence": "number (0-1, confidence of match)",
+          "inventoryCreated": {
+            "inventoryId": "string",
+            "quantity": "number (converted to base unit)",
+            "unit": "string",
+            "expirationDate": "date (calculated)"
+          }
+        }
+      },
+      "totalAmount": "number",
+      "currency": "string",
+      "exchangeRate": "number",
+      "convertedAmount": "number (in RUB if EUR)"
+    },
+
+    "dutchRussianDictionary": {
+      "slagroom": "Сливки",
+      "tomaten": "Томаты",
+      "kip": "Курица",
+      "kipfilet": "Куриное филе",
+      "kaas": "Сыр",
+      "melk": "Молоко",
+      "olijfolie": "Оливковое масло",
+      "ui": "Лук",
+      "knoflook": "Чеснок",
+      "paprika": "Перец",
+      "zout": "Соль"
+    },
+
+    "example": {
+      "receiptId": "REC-20240115-001",
+      "date": "2024-01-15",
+      "time": "14:30",
+      "store": "Albert Heijn Amsterdam",
+      "items": [
+        {
+          "originalName": "Slagroom",
+          "quantity": 1,
+          "unit": "unit",
+          "unitPrice": 2.49,
+          "totalPrice": 2.49,
+          "currency": "EUR",
+          "russianName": "Сливки 33%",
+          "englishName": "Cream 33%",
+          "matchedProductId": "ML-CR-001",
+          "confidence": 0.95,
+          "inventoryCreated": {
+            "inventoryId": "INV-002",
+            "quantity": 500,
+            "unit": "ml",
+            "expirationDate": "2024-01-25"
+          }
+        }
+      ],
+      "totalAmount": 42.50,
+      "currency": "EUR",
+      "exchangeRate": 100.0,
+      "convertedAmount": 4250.00
+    }
+  },
+
+  "prep": {
+    "description": "Prepared dishes or semi-finished products. Can be frozen for 1-3 months.",
+    "fields": {
+      "prepId": {
+        "type": "string",
+        "format": "PREP-###"
+      },
+      "name": {
+        "type": "string",
+        "example": "Маринованные помидоры"
+      },
+      "productLinks": {
+        "type": "array",
+        "items": {
+          "productId": "string (link to Product Master)",
+          "quantity": "number",
+          "unit": "string"
+        }
+      },
+      "portions": {
+        "type": "integer",
+        "example": 8
+      },
+      "portionSize": {
+        "type": "string",
+        "example": "250g"
+      },
+      "storageLocation": {
+        "type": "string",
+        "enum": ["Refrigerator", "Freezer", "Pantry"]
+      },
+      "freezeStatus": {
+        "type": "string",
+        "enum": ["Fresh", "Frozen", "Defrosting", "Defrosted"]
+      },
+      "shelfLife": {
+        "type": "integer",
+        "unit": "days",
+        "example": 90
+      },
+      "createdDate": { "type": "date" },
+      "expirationDate": { "type": "date" },
+      "notes": { "type": "string" }
+    },
+
+    "storageDurations": {
+      "Refrigerator": "1-5 days",
+      "Freezer": "1-3 months",
+      "Pantry": "1-2 weeks"
+    },
+
+    "example": {
+      "prepId": "PREP-001",
+      "name": "Маринованные помидоры",
+      "productLinks": [
+        {
+          "productId": "VG-TM-001",
+          "quantity": 2000,
+          "unit": "g"
+        },
+        {
+          "productId": "PA-OL-001",
+          "quantity": 100,
+          "unit": "ml"
+        }
+      ],
+      "portions": 8,
+      "portionSize": "250g",
+      "storageLocation": "Freezer",
+      "freezeStatus": "Frozen",
+      "shelfLife": 90,
+      "createdDate": "2024-01-10",
+      "expirationDate": "2024-04-10",
+      "notes": "For quick lunches"
+    }
+  },
+
+  "analytics": {
+    "description": "System analytics for usage, waste, costs, and trends.",
+    "modules": {
+      "usageAnalytics": {
+        "metrics": [
+          "Most used products",
+          "Rarely used products",
+          "Monthly spending by category",
+          "Recipe frequency"
+        ]
+      },
+      "wasteAnalytics": {
+        "metrics": [
+          "Products that expire most often",
+          "Most prepared recipes",
+          "Unused ingredients",
+          "Waste rate by category"
+        ]
+      },
+      "costAnalytics": {
+        "metrics": [
+          "Price trends over time",
+          "Spending by category",
+          "Price comparison between stores",
+          "Average meal cost"
+        ]
+      },
+      "menuAnalytics": {
+        "metrics": [
+          "Most frequently cooked dishes",
+          "Average cook time",
+          "Seasonal patterns",
+          "Ingredient utilization"
+        ]
+      }
+    }
+  }
+}
