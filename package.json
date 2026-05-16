@@ -1,0 +1,10 @@
+ {
+  "name": "home-chef-os",
+  "version": "1.0.0",
+  "description": "Kitchen Operating System",
+  "main": "backend/src/index.js",
+  "scripts": {
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev"
+  }
+}
