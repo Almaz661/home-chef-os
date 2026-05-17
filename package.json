@@ -4,13 +4,9 @@
   "private": true,
   "description": "ШефДом — система управления домашней кухней",
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "cd server && npm run dev",
-    "dev:client": "cd client && npm run dev",
-    "build": "cd client && npm run build",
-    "start": "cd server && npm start",
-    "db:generate": "cd server && npx drizzle-kit generate",
-    "db:migrate": "cd server && npx drizzle-kit push"
+    "dev": "vite",
+    "build": "vite build",
+    "start": "vite"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
