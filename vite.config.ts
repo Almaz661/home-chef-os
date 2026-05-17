@@ -5,8 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',
-    port: 10000,
-    allowedHosts: ['home-chef-os.onrender.com']
+    port: 5173
   },
   preview: {
     host: '0.0.0.0',
