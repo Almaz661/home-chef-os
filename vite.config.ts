@@ -1,9 +1,27 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+
   server: {
-    port: 5173
-  }
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/uploads': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
+  },
+
+  preview: {
+    host: '0.0.0.0',
+    port: 10000,
+    allowedHosts: ['home-chef-os.onrender.com'],
+  },
 });
