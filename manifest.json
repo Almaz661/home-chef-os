@@ -1,0 +1,20 @@
+{
+  "name": "ШефДом — Управление домашней кухней",
+  "short_name": "ШефДом",
+  "description": "Система управления домашней кухней: рецепты, меню, покупки, инвентарь",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf7f2",
+  "theme_color": "#f97316",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["food", "lifestyle", "utilities"],
+  "lang": "ru"
+}
