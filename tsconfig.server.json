@@ -10,7 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "dist-server",
-    "rootDir": ".",
+    "rootDir": "server",
     "declaration": false,
     "sourceMap": false,
     "types": ["node"],
