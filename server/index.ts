@@ -43,15 +43,40 @@ async function main() {
     }),
   );
 
-  // In production, serve the built frontend
+  // In production, serve the built frontend.
+  //
+  // We try several candidate locations because the layout differs between
+  // running with tsx (server/index.ts) and a hypothetical compiled build.
   if (NODE_ENV === 'production') {
-    // Compiled file lives at dist-server/index.js, frontend is at dist/
-    // (sibling). One level up from __dirname gets us to the project root.
-    const distDir = path.resolve(__dirname, '..', 'dist');
-    if (existsSync(distDir)) {
+    const candidates = [
+      path.resolve(process.cwd(), 'dist'),
+      path.resolve(__dirname, '..', 'dist'),
+      path.resolve(__dirname, '..', '..', 'dist'),
+    ];
+
+    const distDir = candidates.find((p) => existsSync(path.join(p, 'index.html')));
+
+    if (distDir) {
+      console.log(`[server] serving frontend from ${distDir}`);
       app.use(express.static(distDir));
       app.get('*', (_req, res) => {
         res.sendFile(path.join(distDir, 'index.html'));
+      });
+    } else {
+      console.warn('[server] WARNING: frontend bundle not found in any of:');
+      for (const p of candidates) console.warn(`  - ${p}`);
+
+      // Diagnostic page so the user gets useful feedback instead of "Cannot GET /"
+      app.get('*', (_req, res) => {
+        res.status(503).type('html').send(`<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>ШефДом</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:48px auto;padding:0 20px;color:#333}h1{color:#c00}code{background:#eee;padding:2px 5px;border-radius:3px;font-size:13px}</style>
+</head><body>
+<h1>Фронтенд не собран</h1>
+<p>Сервер запустился, но не нашёл <code>dist/index.html</code>.
+В логах деплоя должно было быть <code>vite build</code>.</p>
+<p>API живой: <a href="/api/health">/api/health</a></p>
+</body></html>`);
       });
     }
   }
