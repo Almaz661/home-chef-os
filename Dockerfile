@@ -1,6 +1,7 @@
 # Multi-stage Dockerfile for production.
-# Builds the React frontend to /app/dist, the Node server to /app/dist-server,
-# and runs the compiled server (which serves both API and static frontend).
+# Builds the React frontend to /app/dist, then runs the server with tsx
+# (TS-on-the-fly). The server lives in server/ and serves both the API
+# and the static frontend at dist/.
 
 FROM node:22-alpine AS builder
 
@@ -22,10 +23,10 @@ RUN apk add --no-cache python3 make g++
 WORKDIR /app
 
 COPY --from=builder /app/package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
-
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/dist-server ./dist-server
+COPY --from=builder /app/server ./server
+COPY --from=builder /app/tsconfig.json ./
 
 # Default DB location — override with DB_PATH for persistence
 RUN mkdir -p /var/data
@@ -35,4 +36,4 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["node", "dist-server/index.js"]
+CMD ["npx", "tsx", "server/index.ts"]
