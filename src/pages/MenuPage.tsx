@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, X, ShoppingCart, Search } from 'lucide-react';
 import { trpc } from '../utils/trpc';
 import { ToastStack, useToasts } from '../components/Toast';
@@ -28,6 +28,7 @@ export default function MenuPage() {
   const [recipeSearch, setRecipeSearch] = useState('');
   const toasts = useToasts();
   const utils = trpc.useUtils();
+  const navigate = useNavigate();
 
   const weekStartDate = formatDate(currentWeek);
   const weekData = trpc.menu.getWeek.useQuery({ weekStartDate });
@@ -58,6 +59,9 @@ export default function MenuPage() {
       } else {
         toasts.push(`Список покупок обновлён: ${data.count} позиций`, 'success');
       }
+      // Auto-navigate to the shopping page — that's almost always what
+      // the user wants right after pressing "В покупки".
+      navigate('/shopping');
     },
     onError: (err) => {
       toasts.push(err.message || 'Не удалось сформировать список', 'error');
@@ -130,12 +134,6 @@ export default function MenuPage() {
               {generateShoppingMutation.isPending ? 'Готовим...' : 'В покупки'}
             </span>
           </button>
-          <Link
-            to="/shopping"
-            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            <span className="hidden sm:inline">Открыть список</span>
-          </Link>
         </div>
       </div>
 
