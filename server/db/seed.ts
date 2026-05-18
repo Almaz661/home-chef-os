@@ -1,7 +1,6 @@
 import { db, schema } from './index.js';
-import { eq } from 'drizzle-orm';
 
-export async function seed() {
+export async function runSeed() {
   // Create default user with PIN 1234
   const existingUsers = db.select().from(schema.users).all();
   if (existingUsers.length === 0) {

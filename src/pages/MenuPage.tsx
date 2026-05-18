@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, X, ShoppingCart, Search } from 'lucide-react';
 import { trpc } from '../utils/trpc';
 

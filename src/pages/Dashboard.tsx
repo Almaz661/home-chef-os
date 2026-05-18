@@ -1,0 +1,187 @@
+import { Link } from 'react-router-dom';
+import { BookOpen, Calendar, ShoppingCart, Package, Plus, ArrowRight, Clock } from 'lucide-react';
+import { trpc } from '../utils/trpc';
+
+export default function Dashboard() {
+  const recipeStats = trpc.recipes.getStats.useQuery();
+  const shoppingStats = trpc.shopping.getStats.useQuery();
+  const inventoryStats = trpc.inventory.getStats.useQuery();
+  const productStats = trpc.products.getStats.useQuery();
+
+  const recentRecipes = trpc.recipes.list.useQuery({});
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Главная</h1>
+        <p className="text-gray-500 mt-1">Добро пожаловать в ШефДом</p>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
+        <Link
+          to="/recipes"
+          className="bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <BookOpen className="w-6 h-6 text-primary-600" />
+            <ArrowRight className="w-4 h-4 text-gray-300" />
+          </div>
+          <div className="text-2xl font-bold text-gray-900">{recipeStats.data?.total ?? '—'}</div>
+          <div className="text-xs text-gray-500 mt-1">Рецептов</div>
+        </Link>
+
+        <Link
+          to="/shopping"
+          className="bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <ShoppingCart className="w-6 h-6 text-green-600" />
+            <ArrowRight className="w-4 h-4 text-gray-300" />
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {shoppingStats.data?.unchecked ?? '—'}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">К покупке</div>
+        </Link>
+
+        <Link
+          to="/inventory"
+          className="bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <Package className="w-6 h-6 text-blue-600" />
+            <ArrowRight className="w-4 h-4 text-gray-300" />
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {inventoryStats.data?.total ?? '—'}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            В запасах
+            {inventoryStats.data?.expiringSoon ? (
+              <span className="ml-1 text-red-600">
+                ({inventoryStats.data.expiringSoon} скоро истекают)
+              </span>
+            ) : null}
+          </div>
+        </Link>
+
+        <Link
+          to="/products"
+          className="bg-white rounded-2xl border border-gray-100 p-4 hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <Package className="w-6 h-6 text-amber-600" />
+            <ArrowRight className="w-4 h-4 text-gray-300" />
+          </div>
+          <div className="text-2xl font-bold text-gray-900">{productStats.data?.total ?? '—'}</div>
+          <div className="text-xs text-gray-500 mt-1">Продуктов</div>
+        </Link>
+      </div>
+
+      {/* Quick actions */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+        <Link
+          to="/recipes/add"
+          className="flex items-center gap-3 p-4 bg-primary-50 hover:bg-primary-100 rounded-2xl transition-colors"
+        >
+          <div className="w-10 h-10 bg-primary-600 text-white rounded-xl flex items-center justify-center">
+            <Plus className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="font-medium text-primary-900">Новый рецепт</div>
+            <div className="text-xs text-primary-700">Создать или импортировать</div>
+          </div>
+        </Link>
+
+        <Link
+          to="/menu"
+          className="flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 rounded-2xl transition-colors"
+        >
+          <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center">
+            <Calendar className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="font-medium text-blue-900">Меню недели</div>
+            <div className="text-xs text-blue-700">Спланировать питание</div>
+          </div>
+        </Link>
+
+        <Link
+          to="/shopping"
+          className="flex items-center gap-3 p-4 bg-green-50 hover:bg-green-100 rounded-2xl transition-colors"
+        >
+          <div className="w-10 h-10 bg-green-600 text-white rounded-xl flex items-center justify-center">
+            <ShoppingCart className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="font-medium text-green-900">Покупки</div>
+            <div className="text-xs text-green-700">Список на сегодня</div>
+          </div>
+        </Link>
+      </div>
+
+      {/* Recent recipes */}
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-900">Последние рецепты</h2>
+          <Link
+            to="/recipes"
+            className="text-sm text-primary-600 hover:text-primary-700"
+          >
+            Все
+          </Link>
+        </div>
+
+        {recentRecipes.data && recentRecipes.data.length > 0 ? (
+          <div className="divide-y divide-gray-50">
+            {recentRecipes.data.slice(0, 5).map((r) => (
+              <Link
+                key={r.id}
+                to={`/recipes/${r.id}`}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+              >
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-100 to-primary-50 flex-shrink-0 overflow-hidden">
+                  {r.imageUrl ? (
+                    <img src={r.imageUrl} alt={r.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xl">🍽️</div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 truncate">{r.title}</div>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                    {r.totalTime && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {r.totalTime} мин
+                      </span>
+                    )}
+                    {r.category && (
+                      <span className="px-1.5 py-0.5 bg-gray-100 rounded text-xs">
+                        {r.category}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-gray-300" />
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 px-4">
+            <BookOpen className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500">Рецептов пока нет</p>
+            <Link
+              to="/recipes/add"
+              className="inline-flex items-center gap-1 mt-3 text-sm text-primary-600 hover:text-primary-700"
+            >
+              <Plus className="w-4 h-4" />
+              Добавить первый
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

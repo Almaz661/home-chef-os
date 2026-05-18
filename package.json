@@ -1,18 +1,54 @@
 {
-  "name": "homechef",
+  "name": "home-chef-os",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "start": "vite preview --host 0.0.0.0 --port 10000"
+    "dev": "concurrently -n web,api -c blue,green \"npm run dev:web\" \"npm run dev:api\"",
+    "dev:web": "vite",
+    "dev:api": "tsx watch server/index.ts",
+    "build": "tsc -p tsconfig.server.json && vite build",
+    "start": "NODE_ENV=production node dist-server/index.js",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
+    "db:migrate": "tsx server/db/migrate.ts",
+    "db:seed": "tsx server/db/seed-cli.ts",
+    "db:reset": "rm -f data/homechef.db data/homechef.db-shm data/homechef.db-wal && npm run db:migrate && npm run db:seed",
+    "test": "vitest --run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "vite": "^5.2.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "@tailwindcss/vite": "^4.1.7"
+    "@trpc/client": "^11.0.0",
+    "@trpc/react-query": "^11.0.0",
+    "@trpc/server": "^11.0.0",
+    "@tanstack/react-query": "^5.59.0",
+    "better-sqlite3": "^11.3.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "drizzle-orm": "^0.36.0",
+    "express": "^4.21.0",
+    "lucide-react": "^0.460.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.27.0",
+    "superjson": "^2.2.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0-beta.6",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.7.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "concurrently": "^9.0.1",
+    "drizzle-kit": "^0.27.0",
+    "tailwindcss": "^4.0.0-beta.6",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
   }
 }
-
