@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, Users, Trash2, ExternalLink, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, Clock, Users, Trash2, ExternalLink, Minus, Plus, Pencil } from 'lucide-react';
 import { trpc } from '../utils/trpc';
 
 export default function RecipeDetailPage() {
@@ -47,16 +47,26 @@ export default function RecipeDetailPage() {
           <ArrowLeft className="w-5 h-5" />
           <span>Назад к рецептам</span>
         </Link>
-        <button
-          onClick={() => {
-            if (confirm('Удалить рецепт?')) {
-              deleteMutation.mutate({ id: Number(id) });
-            }
-          }}
-          className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-        >
-          <Trash2 className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <Link
+            to={`/recipes/${id}/edit`}
+            className="p-2 text-gray-400 hover:text-primary-600 rounded-lg hover:bg-primary-50 transition-colors"
+            title="Редактировать"
+          >
+            <Pencil className="w-5 h-5" />
+          </Link>
+          <button
+            onClick={() => {
+              if (confirm('Удалить рецепт?')) {
+                deleteMutation.mutate({ id: Number(id) });
+              }
+            }}
+            className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+            title="Удалить"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Hero */}

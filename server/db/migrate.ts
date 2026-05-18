@@ -7,10 +7,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
- * Hand-written initial migration for SQLite.
- * Idempotent — uses CREATE TABLE IF NOT EXISTS.
+ * Migrations are versioned via PRAGMA user_version.
+ *
+ * V1: initial schema (CREATE TABLE IF NOT EXISTS ...).
+ * V2: shopping list — track in-stock context for each item.
+ *
+ * To add a new migration, push another entry to MIGRATIONS with
+ * incremented version. Each migration runs inside a transaction.
  */
-const SCHEMA_SQL = `
+const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   pin TEXT NOT NULL,
@@ -138,6 +143,20 @@ CREATE INDEX IF NOT EXISTS idx_inventory_storage ON inventory(storage_type);
 CREATE INDEX IF NOT EXISTS idx_purchase_items_user ON purchase_items(user_id);
 `;
 
+// V2: track inventory context on shopping list items
+//   - needed_quantity: how much the recipes called for (before subtracting stock)
+//   - in_stock_quantity: how much was already at home
+//   - quantity is the final amount the user still needs to buy
+const SCHEMA_V2 = `
+ALTER TABLE purchase_items ADD COLUMN needed_quantity REAL;
+ALTER TABLE purchase_items ADD COLUMN in_stock_quantity REAL DEFAULT 0;
+`;
+
+const MIGRATIONS: Array<{ version: number; sql: string }> = [
+  { version: 1, sql: SCHEMA_V1 },
+  { version: 2, sql: SCHEMA_V2 },
+];
+
 export function runMigrations() {
   const dbPath = process.env.DB_PATH
     ? process.env.DB_PATH
@@ -148,10 +167,22 @@ export function runMigrations() {
   const sqlite = new Database(dbPath);
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
-  sqlite.exec(SCHEMA_SQL);
-  sqlite.close();
 
-  console.log(`[migrate] schema ensured at ${dbPath}`);
+  const currentVersion = (sqlite.pragma('user_version', { simple: true }) as number) ?? 0;
+
+  for (const m of MIGRATIONS) {
+    if (m.version > currentVersion) {
+      const trx = sqlite.transaction(() => {
+        sqlite.exec(m.sql);
+        sqlite.pragma(`user_version = ${m.version}`);
+      });
+      trx();
+      console.log(`[migrate] applied v${m.version}`);
+    }
+  }
+
+  sqlite.close();
+  console.log(`[migrate] schema at ${dbPath} (version ${MIGRATIONS[MIGRATIONS.length - 1].version})`);
 }
 
 // CLI entry point

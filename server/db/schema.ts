@@ -84,6 +84,10 @@ export const purchaseItems = sqliteTable('purchase_items', {
   category: text('category'),
   isChecked: integer('is_checked', { mode: 'boolean' }).default(false),
   recipeSource: text('recipe_source'),
+  /** How much the recipes called for, before subtracting stock. */
+  neededQuantity: real('needed_quantity'),
+  /** How much was already at home (subtracted from `quantity`). */
+  inStockQuantity: real('in_stock_quantity').default(0),
   addedAt: text('added_at').default(sql`(datetime('now'))`),
 });
 

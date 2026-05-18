@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, X, ShoppingCart, Search } from 'lucide-react';
 import { trpc } from '../utils/trpc';
+import { ToastStack, useToasts } from '../components/Toast';
 
 const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const DAYS_FULL = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
@@ -24,6 +26,7 @@ export default function MenuPage() {
   const [showRecipeModal, setShowRecipeModal] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{ day: number; meal: string } | null>(null);
   const [recipeSearch, setRecipeSearch] = useState('');
+  const toasts = useToasts();
 
   const weekStartDate = formatDate(currentWeek);
   const weekData = trpc.menu.getWeek.useQuery({ weekStartDate });
@@ -40,7 +43,14 @@ export default function MenuPage() {
   });
   const generateShoppingMutation = trpc.menu.generateShoppingList.useMutation({
     onSuccess: (data) => {
-      alert(`Список покупок сформирован: ${data.count} позиций`);
+      if (data.count === 0) {
+        toasts.push('Все ингредиенты уже есть в запасах — список пуст', 'info');
+      } else {
+        toasts.push(`Список покупок обновлён: ${data.count} позиций`, 'success');
+      }
+    },
+    onError: (err) => {
+      toasts.push(err.message || 'Не удалось сформировать список', 'error');
     },
   });
 
@@ -79,18 +89,44 @@ export default function MenuPage() {
   const weekEnd = new Date(currentWeek);
   weekEnd.setDate(weekEnd.getDate() + 6);
 
+  const totalMealsPlanned = weekData.data?.items.length ?? 0;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <ToastStack messages={toasts.messages} onClose={toasts.close} />
+
+      <div className="flex items-center justify-between mb-6 gap-2">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Планирование меню</h1>
-        <button
-          onClick={() => weekData.data?.menu && generateShoppingMutation.mutate({ menuId: weekData.data.menu.id })}
-          disabled={!weekData.data?.menu || generateShoppingMutation.isPending}
-          className="flex items-center gap-2 px-4 py-2.5 bg-green-600 rounded-xl text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
-        >
-          <ShoppingCart className="w-4 h-4" />
-          <span className="hidden sm:inline">Список покупок</span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() =>
+              weekData.data?.menu &&
+              generateShoppingMutation.mutate({ menuId: weekData.data.menu.id })
+            }
+            disabled={
+              !weekData.data?.menu ||
+              totalMealsPlanned === 0 ||
+              generateShoppingMutation.isPending
+            }
+            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 rounded-xl text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title={
+              totalMealsPlanned === 0
+                ? 'Добавьте хотя бы один рецепт в меню'
+                : 'Сформировать список покупок с учётом запасов'
+            }
+          >
+            <ShoppingCart className="w-4 h-4" />
+            <span className="hidden sm:inline">
+              {generateShoppingMutation.isPending ? 'Готовим...' : 'В покупки'}
+            </span>
+          </button>
+          <Link
+            to="/shopping"
+            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <span className="hidden sm:inline">Открыть список</span>
+          </Link>
+        </div>
       </div>
 
       {/* Week navigation */}

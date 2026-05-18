@@ -129,6 +129,78 @@ export const recipesRouter = router({
       return { success: true };
     }),
 
+  update: publicProcedure
+    .input(z.object({
+      id: z.number(),
+      title: z.string().min(1),
+      description: z.string().nullable().optional(),
+      imageUrl: z.string().nullable().optional(),
+      servings: z.number().nullable().optional(),
+      prepTime: z.number().nullable().optional(),
+      cookTime: z.number().nullable().optional(),
+      totalTime: z.number().nullable().optional(),
+      sourceUrl: z.string().nullable().optional(),
+      source: z.string().nullable().optional(),
+      category: z.string().nullable().optional(),
+      cuisine: z.string().nullable().optional(),
+      difficulty: z.string().nullable().optional(),
+      calories: z.number().nullable().optional(),
+      ingredients: z.array(z.object({
+        name: z.string(),
+        amount: z.number().nullable().optional(),
+        unit: z.string().nullable().optional(),
+        group: z.string().nullable().optional(),
+        sortOrder: z.number().optional(),
+      })),
+      steps: z.array(z.object({
+        stepNumber: z.number(),
+        instruction: z.string(),
+        imageUrl: z.string().nullable().optional(),
+        timerMinutes: z.number().nullable().optional(),
+      })),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ingredients, steps, ...recipeData } = input;
+
+      // Check existence
+      const existing = db.select().from(schema.recipes).where(eq(schema.recipes.id, id)).get();
+      if (!existing) {
+        throw new Error('Рецепт не найден');
+      }
+
+      db.update(schema.recipes).set({
+        ...recipeData,
+        updatedAt: sql`(datetime('now'))`,
+      }).where(eq(schema.recipes.id, id)).run();
+
+      // Replace ingredients and steps wholesale (the form sends the full list).
+      db.delete(schema.recipeIngredients).where(eq(schema.recipeIngredients.recipeId, id)).run();
+      db.delete(schema.recipeSteps).where(eq(schema.recipeSteps.recipeId, id)).run();
+
+      for (const ing of ingredients) {
+        db.insert(schema.recipeIngredients).values({
+          recipeId: id,
+          name: ing.name,
+          amount: ing.amount ?? null,
+          unit: ing.unit ?? null,
+          group: ing.group ?? null,
+          sortOrder: ing.sortOrder ?? 0,
+        }).run();
+      }
+
+      for (const step of steps) {
+        db.insert(schema.recipeSteps).values({
+          recipeId: id,
+          stepNumber: step.stepNumber,
+          instruction: step.instruction,
+          imageUrl: step.imageUrl ?? null,
+          timerMinutes: step.timerMinutes ?? null,
+        }).run();
+      }
+
+      return { id, success: true };
+    }),
+
   getCategories: publicProcedure.query(async () => {
     const results = db.selectDistinct({ category: schema.recipes.category })
       .from(schema.recipes)

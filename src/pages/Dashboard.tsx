@@ -121,6 +121,37 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {/* Recipe of the day — featured card */}
+      {recentRecipes.data && recentRecipes.data.length > 0 && recentRecipes.data[0].imageUrl && (
+        <Link
+          to={`/recipes/${recentRecipes.data[0].id}`}
+          className="group relative block mb-8 rounded-2xl overflow-hidden border border-gray-100 bg-white hover:shadow-lg transition-shadow"
+        >
+          <div className="aspect-[21/9] bg-gradient-to-br from-primary-100 to-primary-50 relative">
+            <img
+              src={recentRecipes.data[0].imageUrl}
+              alt={recentRecipes.data[0].title}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 text-white">
+              <div className="text-xs uppercase tracking-wide opacity-80 mb-1">
+                Рецепт дня
+              </div>
+              <div className="text-xl md:text-2xl font-bold">
+                {recentRecipes.data[0].title}
+              </div>
+              {recentRecipes.data[0].totalTime && (
+                <div className="flex items-center gap-1 text-sm mt-1 opacity-90">
+                  <Clock className="w-3.5 h-3.5" />
+                  {recentRecipes.data[0].totalTime} мин
+                </div>
+              )}
+            </div>
+          </div>
+        </Link>
+      )}
+
       {/* Recent recipes */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">

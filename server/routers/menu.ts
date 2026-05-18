@@ -66,12 +66,21 @@ export const menuRouter = router({
   generateShoppingList: publicProcedure
     .input(z.object({ menuId: z.number() }))
     .mutation(async ({ input }) => {
-      // Get all menu items with recipes
+      // 1. Collect all menu items with recipes
       const items = db.select().from(schema.menuItems)
         .where(eq(schema.menuItems.menuId, input.menuId))
         .all();
 
-      const ingredientMap = new Map<string, { quantity: number; unit: string; category: string | null }>();
+      // 2. Aggregate ingredients across all menu recipes.
+      // Key combines normalized name + unit, so "молоко мл" and "молоко л"
+      // stay separate.
+      type Aggregated = {
+        displayName: string;
+        quantity: number;
+        unit: string;
+        category: string | null;
+      };
+      const ingredientMap = new Map<string, Aggregated>();
 
       for (const item of items) {
         if (!item.recipeId) continue;
@@ -80,63 +89,94 @@ export const menuRouter = router({
           .all();
 
         for (const ing of ingredients) {
-          const key = ing.name.toLowerCase();
+          const nameKey = ing.name.toLowerCase().trim();
+          const unitKey = (ing.unit || '').toLowerCase().trim();
+          const key = `${nameKey}|${unitKey}`;
+          const amount = ing.amount ?? 1;
+
           const existing = ingredientMap.get(key);
-          if (existing && ing.amount) {
-            existing.quantity += ing.amount;
-          } else if (ing.amount) {
-            // Try to find category from product master
+          if (existing) {
+            existing.quantity += amount;
+          } else {
+            // Look up category from product master
             const product = db.select().from(schema.productMaster)
-              .where(sql`lower(${schema.productMaster.name}) = ${key}`)
+              .where(sql`lower(${schema.productMaster.name}) = ${nameKey}`)
               .get();
             ingredientMap.set(key, {
-              quantity: ing.amount,
+              displayName: ing.name.charAt(0).toUpperCase() + ing.name.slice(1),
+              quantity: amount,
               unit: ing.unit || '',
               category: product?.category || 'Другое',
             });
-          } else {
-            if (!ingredientMap.has(key)) {
-              const product = db.select().from(schema.productMaster)
-                .where(sql`lower(${schema.productMaster.name}) = ${key}`)
-                .get();
-              ingredientMap.set(key, {
-                quantity: 1,
-                unit: ing.unit || '',
-                category: product?.category || 'Другое',
-              });
+          }
+        }
+      }
+
+      // 3. Subtract inventory. Match by normalized name + unit;
+      // also try a "name only" fallback if units are different but same product.
+      const inventoryItems = db.select().from(schema.inventory).all();
+      const inStockMap = new Map<string, number>(); // key -> in-stock amount used
+
+      for (const inv of inventoryItems) {
+        if (!inv.quantity || inv.quantity <= 0) continue;
+        const nameKey = inv.productName.toLowerCase().trim();
+        const unitKey = (inv.unit || '').toLowerCase().trim();
+        const exactKey = `${nameKey}|${unitKey}`;
+
+        // Try exact match first (same name + unit)
+        let target = ingredientMap.get(exactKey);
+        let targetKey = exactKey;
+
+        // Fallback: any unit, same name
+        if (!target) {
+          for (const [k, v] of ingredientMap) {
+            if (k.startsWith(`${nameKey}|`)) {
+              target = v;
+              targetKey = k;
+              break;
             }
           }
         }
-      }
 
-      // Subtract inventory
-      const inventoryItems = db.select().from(schema.inventory).all();
-      for (const inv of inventoryItems) {
-        const key = inv.productName.toLowerCase();
-        const needed = ingredientMap.get(key);
-        if (needed && inv.quantity) {
-          needed.quantity = Math.max(0, needed.quantity - inv.quantity);
-          if (needed.quantity === 0) {
-            ingredientMap.delete(key);
-          }
+        if (target) {
+          const used = Math.min(inv.quantity, target.quantity);
+          target.quantity -= used;
+          inStockMap.set(targetKey, (inStockMap.get(targetKey) || 0) + used);
         }
       }
 
-      // Clear existing purchase items and add new ones
-      db.delete(schema.purchaseItems).where(eq(schema.purchaseItems.userId, 1)).run();
+      // 4. Make idempotent: remove only auto-generated rows; keep manually
+      // added items (they have recipeSource = NULL or a different value).
+      db.delete(schema.purchaseItems)
+        .where(and(
+          eq(schema.purchaseItems.userId, 1),
+          eq(schema.purchaseItems.recipeSource, 'menu'),
+        ))
+        .run();
 
-      for (const [name, data] of ingredientMap) {
+      // 5. Insert fresh rows with full context.
+      let insertedCount = 0;
+      for (const [key, data] of ingredientMap) {
+        const inStock = inStockMap.get(key) || 0;
+        const needed = data.quantity + inStock;
+
+        // Skip if everything is already at home.
+        if (data.quantity <= 0) continue;
+
         db.insert(schema.purchaseItems).values({
           userId: 1,
-          productName: name.charAt(0).toUpperCase() + name.slice(1),
+          productName: data.displayName,
           quantity: data.quantity,
           unit: data.unit,
           category: data.category,
           isChecked: false,
           recipeSource: 'menu',
+          neededQuantity: needed,
+          inStockQuantity: inStock,
         }).run();
+        insertedCount++;
       }
 
-      return { count: ingredientMap.size };
+      return { count: insertedCount };
     }),
 });

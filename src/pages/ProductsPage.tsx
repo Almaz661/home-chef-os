@@ -139,7 +139,14 @@ export default function ProductsPage() {
 
       {products.data?.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-gray-500">Продукты не найдены</p>
+          <p className="text-gray-500">
+            {search ? 'Продукты не найдены' : 'Список продуктов пуст'}
+          </p>
+          {!search && (
+            <p className="text-gray-400 text-sm mt-1">
+              Добавьте первый продукт через кнопку «Добавить»
+            </p>
+          )}
         </div>
       )}
     </div>

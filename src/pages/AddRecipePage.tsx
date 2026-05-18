@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useParams } from 'react-router-dom';
+import { ArrowLeft, Plus, Trash2, ImageIcon } from 'lucide-react';
 import { trpc } from '../utils/trpc';
 
 interface Ingredient {
@@ -14,10 +14,20 @@ interface Step {
   timerMinutes: string;
 }
 
+/**
+ * Add or edit a recipe. Mode is determined by `:id` in the route:
+ *   /recipes/add        -> create
+ *   /recipes/:id/edit   -> edit
+ */
 export default function AddRecipePage() {
   const navigate = useNavigate();
+  const params = useParams<{ id?: string }>();
+  const editingId = params.id ? Number(params.id) : null;
+  const isEditing = editingId !== null;
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [servings, setServings] = useState('4');
   const [prepTime, setPrepTime] = useState('');
   const [cookTime, setCookTime] = useState('');
@@ -27,10 +37,55 @@ export default function AddRecipePage() {
   const [calories, setCalories] = useState('');
   const [ingredients, setIngredients] = useState<Ingredient[]>([{ name: '', amount: '', unit: '' }]);
   const [steps, setSteps] = useState<Step[]>([{ instruction: '', timerMinutes: '' }]);
+  const [hydrated, setHydrated] = useState(false);
+
+  // In edit mode, fetch existing recipe and prefill the form.
+  const existing = trpc.recipes.getById.useQuery(
+    { id: editingId! },
+    { enabled: isEditing },
+  );
+
+  useEffect(() => {
+    if (!isEditing || !existing.data || hydrated) return;
+    const r = existing.data;
+    setTitle(r.title);
+    setDescription(r.description ?? '');
+    setImageUrl(r.imageUrl ?? '');
+    setServings(String(r.servings ?? 4));
+    setPrepTime(r.prepTime ? String(r.prepTime) : '');
+    setCookTime(r.cookTime ? String(r.cookTime) : '');
+    setCategory(r.category ?? '');
+    setCuisine(r.cuisine ?? '');
+    setDifficulty(r.difficulty ?? 'medium');
+    setCalories(r.calories ? String(r.calories) : '');
+    setIngredients(
+      r.ingredients.length > 0
+        ? r.ingredients.map((i) => ({
+            name: i.name,
+            amount: i.amount != null ? String(i.amount) : '',
+            unit: i.unit ?? '',
+          }))
+        : [{ name: '', amount: '', unit: '' }],
+    );
+    setSteps(
+      r.steps.length > 0
+        ? r.steps.map((s) => ({
+            instruction: s.instruction,
+            timerMinutes: s.timerMinutes != null ? String(s.timerMinutes) : '',
+          }))
+        : [{ instruction: '', timerMinutes: '' }],
+    );
+    setHydrated(true);
+  }, [isEditing, existing.data, hydrated]);
 
   const createMutation = trpc.recipes.create.useMutation({
     onSuccess: (data) => navigate(`/recipes/${data.id}`),
   });
+  const updateMutation = trpc.recipes.update.useMutation({
+    onSuccess: () => navigate(`/recipes/${editingId}`),
+  });
+  const isPending = createMutation.isPending || updateMutation.isPending;
+  const errorMessage = createMutation.error?.message || updateMutation.error?.message;
 
   const addIngredient = () => setIngredients([...ingredients, { name: '', amount: '', unit: '' }]);
   const removeIngredient = (idx: number) => setIngredients(ingredients.filter((_, i) => i !== idx));
@@ -51,10 +106,11 @@ export default function AddRecipePage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const totalTime = (parseInt(prepTime) || 0) + (parseInt(cookTime) || 0);
-    
-    createMutation.mutate({
+
+    const payload = {
       title,
       description: description || undefined,
+      imageUrl: imageUrl || undefined,
       servings: parseInt(servings) || 4,
       prepTime: parseInt(prepTime) || undefined,
       cookTime: parseInt(cookTime) || undefined,
@@ -64,7 +120,7 @@ export default function AddRecipePage() {
       difficulty,
       calories: parseInt(calories) || undefined,
       ingredients: ingredients
-        .filter(i => i.name.trim())
+        .filter((i) => i.name.trim())
         .map((i, idx) => ({
           name: i.name.trim(),
           amount: i.amount ? parseFloat(i.amount) : null,
@@ -72,22 +128,51 @@ export default function AddRecipePage() {
           sortOrder: idx + 1,
         })),
       steps: steps
-        .filter(s => s.instruction.trim())
+        .filter((s) => s.instruction.trim())
         .map((s, idx) => ({
           stepNumber: idx + 1,
           instruction: s.instruction.trim(),
           timerMinutes: s.timerMinutes ? parseInt(s.timerMinutes) : undefined,
         })),
-    });
+    };
+
+    if (isEditing) {
+      updateMutation.mutate({ id: editingId!, ...payload });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
+
+  // Loading state for edit mode
+  if (isEditing && existing.isLoading) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500">Загрузка рецепта...</p>
+      </div>
+    );
+  }
+
+  if (isEditing && existing.data === null) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500">Рецепт не найден</p>
+        <Link to="/recipes" className="text-primary-600 mt-2 inline-block">
+          Вернуться к списку
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div>
       <div className="flex items-center gap-4 mb-6">
-        <Link to="/recipes" className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
+        <Link to={isEditing ? `/recipes/${editingId}` : '/recipes'}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900">Новый рецепт</h1>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {isEditing ? 'Редактировать рецепт' : 'Новый рецепт'}
+        </h1>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl">
@@ -116,6 +201,37 @@ export default function AddRecipePage() {
                 placeholder="Краткое описание рецепта"
               />
             </div>
+
+            {/* Photo URL with preview */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Фото (URL картинки)
+              </label>
+              <div className="flex gap-3 items-start">
+                <input
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="https://..."
+                />
+                <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt="Превью"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <ImageIcon className="w-6 h-6 text-primary-300" />
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Порции</label>
@@ -246,18 +362,24 @@ export default function AddRecipePage() {
           </div>
         </div>
 
+        {errorMessage && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+            {errorMessage}
+          </div>
+        )}
+
         {/* Submit */}
         <div className="flex gap-3">
-          <Link to="/recipes"
+          <Link to={isEditing ? `/recipes/${editingId}` : '/recipes'}
             className="px-6 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
             Отмена
           </Link>
           <button
             type="submit"
-            disabled={!title.trim() || createMutation.isPending}
+            disabled={!title.trim() || isPending}
             className="px-6 py-3 bg-primary-600 rounded-xl text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
-            {createMutation.isPending ? 'Сохранение...' : 'Сохранить рецепт'}
+            {isPending ? 'Сохранение...' : isEditing ? 'Сохранить изменения' : 'Сохранить рецепт'}
           </button>
         </div>
       </form>
