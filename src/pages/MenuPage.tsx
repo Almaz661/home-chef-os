@@ -27,6 +27,7 @@ export default function MenuPage() {
   const [selectedCell, setSelectedCell] = useState<{ day: number; meal: string } | null>(null);
   const [recipeSearch, setRecipeSearch] = useState('');
   const toasts = useToasts();
+  const utils = trpc.useUtils();
 
   const weekStartDate = formatDate(currentWeek);
   const weekData = trpc.menu.getWeek.useQuery({ weekStartDate });
@@ -43,6 +44,10 @@ export default function MenuPage() {
   });
   const generateShoppingMutation = trpc.menu.generateShoppingList.useMutation({
     onSuccess: (data) => {
+      // Invalidate shopping.list and getStats so other pages refetch
+      // (this is what makes the items show up on the Shopping page).
+      utils.shopping.list.invalidate();
+      utils.shopping.getStats.invalidate();
       if (data.count === 0) {
         toasts.push('Все ингредиенты уже есть в запасах — список пуст', 'info');
       } else {
