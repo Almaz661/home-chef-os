@@ -8,7 +8,7 @@
     "dev:web": "vite",
     "dev:api": "tsx watch server/index.ts",
     "build": "vite build",
-    "start": "NODE_ENV=production tsx server/index.ts",
+    "start": "npm run build && NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "db:migrate": "tsx server/db/migrate.ts",
     "db:seed": "tsx server/db/seed-cli.ts",

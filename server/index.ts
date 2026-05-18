@@ -66,16 +66,31 @@ async function main() {
       console.warn('[server] WARNING: frontend bundle not found in any of:');
       for (const p of candidates) console.warn(`  - ${p}`);
 
-      // Diagnostic page so the user gets useful feedback instead of "Cannot GET /"
+      // Snapshot the FS at server start so we can render it on the diagnostic
+      // page. Lazily — only the immediate children of cwd, no recursion.
+      const fs = await import('node:fs');
+      let cwdListing = '';
+      try {
+        const cwd = process.cwd();
+        const entries = fs.readdirSync(cwd, { withFileTypes: true })
+          .map((d) => `${d.isDirectory() ? '📁' : '📄'} ${d.name}`)
+          .join('\n');
+        cwdListing = `<strong>${cwd}:</strong>\n${entries}`;
+      } catch (err: any) {
+        cwdListing = `(не удалось прочитать FS: ${err.message})`;
+      }
+
       app.get('*', (_req, res) => {
         res.status(503).type('html').send(`<!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><title>ШефДом</title>
-<style>body{font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:48px auto;padding:0 20px;color:#333}h1{color:#c00}code{background:#eee;padding:2px 5px;border-radius:3px;font-size:13px}</style>
+<html lang="ru"><head><meta charset="utf-8"><title>ШефДом — диагностика</title>
+<style>body{font:14px/1.5 -apple-system,system-ui,sans-serif;max-width:720px;margin:32px auto;padding:0 20px;color:#333}h1{color:#c00}h2{margin-top:24px;color:#555;font-size:16px}code,pre{background:#f4f4f4;padding:6px 10px;border-radius:4px;font-size:12px;font-family:ui-monospace,monospace;display:block;white-space:pre-wrap;word-break:break-all}span.code{display:inline;padding:2px 5px}</style>
 </head><body>
 <h1>Фронтенд не собран</h1>
-<p>Сервер запустился, но не нашёл <code>dist/index.html</code>.
-В логах деплоя должно было быть <code>vite build</code>.</p>
-<p>API живой: <a href="/api/health">/api/health</a></p>
+<p>Сервер живой, API работает: <a href="/api/health">/api/health</a></p>
+<h2>Где сервер искал dist/index.html:</h2>
+<pre>${candidates.map((p) => `❌ ${p}/index.html`).join('\n')}</pre>
+<h2>Реальное содержимое рабочей директории:</h2>
+<pre>${cwdListing}</pre>
 </body></html>`);
       });
     }
