@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, ImageIcon } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, ImageIcon, Link2, Loader2 } from 'lucide-react';
 import { trpc } from '../utils/trpc';
+import { ToastStack, useToasts } from '../components/Toast';
 
 interface Ingredient {
   name: string;
@@ -38,6 +39,8 @@ export default function AddRecipePage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([{ name: '', amount: '', unit: '' }]);
   const [steps, setSteps] = useState<Step[]>([{ instruction: '', timerMinutes: '' }]);
   const [hydrated, setHydrated] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const toasts = useToasts();
 
   // In edit mode, fetch existing recipe and prefill the form.
   const existing = trpc.recipes.getById.useQuery(
@@ -83,6 +86,15 @@ export default function AddRecipePage() {
   });
   const updateMutation = trpc.recipes.update.useMutation({
     onSuccess: () => navigate(`/recipes/${editingId}`),
+  });
+  const importMutation = trpc.recipes.importFromUrl.useMutation({
+    onSuccess: (data) => {
+      toasts.push(`Импортирован: ${data.title || 'рецепт'}`, 'success');
+      navigate(`/recipes/${data.id}`);
+    },
+    onError: (err) => {
+      toasts.push(err.message || 'Не удалось импортировать рецепт', 'error');
+    },
   });
   const isPending = createMutation.isPending || updateMutation.isPending;
   const errorMessage = createMutation.error?.message || updateMutation.error?.message;
@@ -165,6 +177,8 @@ export default function AddRecipePage() {
 
   return (
     <div>
+      <ToastStack messages={toasts.messages} onClose={toasts.close} />
+
       <div className="flex items-center gap-4 mb-6">
         <Link to={isEditing ? `/recipes/${editingId}` : '/recipes'}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
@@ -174,6 +188,58 @@ export default function AddRecipePage() {
           {isEditing ? 'Редактировать рецепт' : 'Новый рецепт'}
         </h1>
       </div>
+
+      {/* Импорт по ссылке (только в режиме создания) */}
+      {!isEditing && (
+        <div className="bg-gradient-to-br from-primary-50 to-amber-50 rounded-2xl border border-primary-100 p-5 mb-6 max-w-3xl">
+          <div className="flex items-center gap-2 mb-2">
+            <Link2 className="w-5 h-5 text-primary-600" />
+            <h2 className="text-lg font-bold text-primary-900">Импортировать из интернета</h2>
+          </div>
+          <p className="text-sm text-primary-800/80 mb-3">
+            Вставьте ссылку на рецепт с любого кулинарного сайта — мы скачаем
+            название, ингредиенты, шаги и фото автоматически.
+          </p>
+          <form
+            className="flex flex-col sm:flex-row gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (importUrl.trim()) {
+                importMutation.mutate({ url: importUrl.trim() });
+              }
+            }}
+          >
+            <input
+              type="url"
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              placeholder="https://example.com/recipe/..."
+              className="flex-1 px-4 py-3 border border-primary-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              disabled={importMutation.isPending}
+            />
+            <button
+              type="submit"
+              disabled={!importUrl.trim() || importMutation.isPending}
+              className="flex items-center justify-center gap-2 px-5 py-3 bg-primary-600 rounded-xl text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+            >
+              {importMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Загружаем...
+                </>
+              ) : (
+                <>
+                  <Link2 className="w-4 h-4" />
+                  Импортировать
+                </>
+              )}
+            </button>
+          </form>
+          <p className="text-xs text-primary-700/70 mt-3">
+            Или заполните форму ниже вручную ↓
+          </p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl">
         {/* Basic info */}
