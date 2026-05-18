@@ -217,125 +217,72 @@ export const recipesRouter = router({
   importFromUrl: publicProcedure
     .input(z.object({ url: z.string().url() }))
     .mutation(async ({ input }) => {
+      const { scrapeRecipe } = await import('../services/recipeScraper.js');
+
+      let scraped;
       try {
-        const response = await fetch(input.url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; HomeChef/1.0)',
-          },
-        });
-        const html = await response.text();
-
-        // Try to extract Schema.org Recipe JSON-LD
-        const jsonLdMatch = html.match(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
-        let recipeData: any = null;
-
-        if (jsonLdMatch) {
-          for (const match of jsonLdMatch) {
-            try {
-              const jsonContent = match.replace(/<script[^>]*>/, '').replace(/<\/script>/, '');
-              const parsed = JSON.parse(jsonContent);
-
-              if (Array.isArray(parsed)) {
-                recipeData = parsed.find((item: any) => item['@type'] === 'Recipe');
-              } else if (parsed['@type'] === 'Recipe') {
-                recipeData = parsed;
-              } else if (parsed['@graph']) {
-                recipeData = parsed['@graph'].find((item: any) => item['@type'] === 'Recipe');
-              }
-
-              if (recipeData) break;
-            } catch (e) {
-              continue;
-            }
-          }
-        }
-
-        if (!recipeData) {
-          throw new Error('Не удалось найти данные рецепта на странице. Убедитесь, что сайт использует разметку Schema.org.');
-        }
-
-        // Parse duration (ISO 8601)
-        const parseDuration = (duration: string | undefined): number | undefined => {
-          if (!duration) return undefined;
-          const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
-          if (!match) return undefined;
-          return (parseInt(match[1] || '0') * 60) + parseInt(match[2] || '0');
-        };
-
-        // Parse ingredients
-        const ingredients = (recipeData.recipeIngredient || []).map((ing: string, idx: number) => {
-          const match = ing.match(/^([\d.,/½⅓¼¾⅔⅛]+)?\s*(г|кг|мл|л|шт|ст\.л\.|ч\.л\.|стакан|cup|tbsp|tsp|oz|lb|g|kg|ml|pcs)?\s*(.+)/i);
-          if (match) {
-            return {
-              name: match[3].trim(),
-              amount: match[1] ? parseFloat(match[1].replace(',', '.').replace('½', '0.5').replace('¼', '0.25').replace('¾', '0.75')) : null,
-              unit: match[2] || null,
-              sortOrder: idx + 1,
-            };
-          }
-          return { name: ing.trim(), amount: null, unit: null, sortOrder: idx + 1 };
-        });
-
-        // Parse steps
-        const rawSteps = recipeData.recipeInstructions || [];
-        const steps = rawSteps.map((step: any, idx: number) => ({
-          stepNumber: idx + 1,
-          instruction: typeof step === 'string' ? step : (step.text || step.name || ''),
-        }));
-
-        // Get image
-        let imageUrl: string | undefined;
-        if (recipeData.image) {
-          if (typeof recipeData.image === 'string') {
-            imageUrl = recipeData.image;
-          } else if (Array.isArray(recipeData.image)) {
-            imageUrl = recipeData.image[0];
-          } else if (recipeData.image.url) {
-            imageUrl = recipeData.image.url;
-          }
-        }
-
-        const prepTime = parseDuration(recipeData.prepTime);
-        const cookTime = parseDuration(recipeData.cookTime);
-        const totalTime = parseDuration(recipeData.totalTime) || ((prepTime || 0) + (cookTime || 0)) || undefined;
-
-        // Get servings
-        let servings: number | undefined;
-        if (recipeData.recipeYield) {
-          const yieldStr = Array.isArray(recipeData.recipeYield) ? recipeData.recipeYield[0] : recipeData.recipeYield;
-          const yieldMatch = String(yieldStr).match(/(\d+)/);
-          if (yieldMatch) servings = parseInt(yieldMatch[1]);
-        }
-
-        // Save to DB
-        const result = db.insert(schema.recipes).values({
-          title: recipeData.name || 'Импортированный рецепт',
-          description: recipeData.description || null,
-          imageUrl: imageUrl || null,
-          servings: servings || 4,
-          prepTime: prepTime || null,
-          cookTime: cookTime || null,
-          totalTime: totalTime || null,
-          sourceUrl: input.url,
-          source: new URL(input.url).hostname,
-          category: recipeData.recipeCategory || (recipeData.recipeCategory?.[0]) || null,
-          cuisine: recipeData.recipeCuisine || (Array.isArray(recipeData.recipeCuisine) ? recipeData.recipeCuisine[0] : null),
-          difficulty: 'medium',
-          calories: recipeData.nutrition?.calories ? parseInt(recipeData.nutrition.calories) : null,
-        }).run();
-
-        const recipeId = Number(result.lastInsertRowid);
-
-        for (const ing of ingredients) {
-          db.insert(schema.recipeIngredients).values({ recipeId, ...ing }).run();
-        }
-        for (const step of steps) {
-          db.insert(schema.recipeSteps).values({ recipeId, ...step }).run();
-        }
-
-        return { id: recipeId, title: recipeData.name };
+        scraped = await scrapeRecipe(input.url);
       } catch (error: any) {
         throw new Error(error.message || 'Ошибка импорта рецепта');
       }
+
+      console.log(
+        `[importFromUrl] ${scraped.strategy} → "${scraped.title}" ` +
+          `(${scraped.ingredients.length} ing, ${scraped.steps.length} steps)`,
+      );
+
+      // Save to DB
+      const result = db
+        .insert(schema.recipes)
+        .values({
+          title: scraped.title,
+          description: scraped.description || null,
+          imageUrl: scraped.imageUrl || null,
+          servings: scraped.servings || 4,
+          prepTime: scraped.prepTime || null,
+          cookTime: scraped.cookTime || null,
+          totalTime: scraped.totalTime || null,
+          sourceUrl: input.url,
+          source: scraped.source,
+          category: scraped.category || null,
+          cuisine: scraped.cuisine || null,
+          difficulty: 'medium',
+        })
+        .run();
+
+      const recipeId = Number(result.lastInsertRowid);
+
+      for (let i = 0; i < scraped.ingredients.length; i++) {
+        const ing = scraped.ingredients[i];
+        if (!ing.name) continue;
+        db.insert(schema.recipeIngredients)
+          .values({
+            recipeId,
+            name: ing.name,
+            amount: ing.amount,
+            unit: ing.unit,
+            sortOrder: i + 1,
+          })
+          .run();
+      }
+
+      for (const step of scraped.steps) {
+        db.insert(schema.recipeSteps)
+          .values({
+            recipeId,
+            stepNumber: step.stepNumber,
+            instruction: step.instruction,
+            imageUrl: step.imageUrl || null,
+          })
+          .run();
+      }
+
+      return {
+        id: recipeId,
+        title: scraped.title,
+        strategy: scraped.strategy,
+        ingredientsCount: scraped.ingredients.length,
+        stepsCount: scraped.steps.length,
+      };
     }),
 });

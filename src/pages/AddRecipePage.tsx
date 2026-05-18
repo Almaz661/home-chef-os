@@ -89,8 +89,14 @@ export default function AddRecipePage() {
   });
   const importMutation = trpc.recipes.importFromUrl.useMutation({
     onSuccess: (data) => {
-      toasts.push(`Импортирован: ${data.title || 'рецепт'}`, 'success');
-      navigate(`/recipes/${data.id}`);
+      const ing = data.ingredientsCount ?? 0;
+      const steps = data.stepsCount ?? 0;
+      const summary =
+        ing === 0 && steps === 0
+          ? `Импортирован "${data.title}", но ингредиенты/шаги не распознаны — заполните вручную`
+          : `Импортирован: "${data.title}" (${ing} ингредиентов, ${steps} шагов)`;
+      toasts.push(summary, ing === 0 && steps === 0 ? 'info' : 'success');
+      navigate(`/recipes/${data.id}/edit`);
     },
     onError: (err) => {
       toasts.push(err.message || 'Не удалось импортировать рецепт', 'error');
