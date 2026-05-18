@@ -194,21 +194,21 @@ export default function Dashboard() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-gray-900 truncate">{r.title}</div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5 min-w-0">
                     {r.totalTime && (
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap">
                         <Clock className="w-3 h-3" />
                         {r.totalTime} мин
                       </span>
                     )}
                     {r.category && (
-                      <span className="px-1.5 py-0.5 bg-gray-100 rounded text-xs">
+                      <span className="px-1.5 py-0.5 bg-gray-100 rounded text-xs truncate min-w-0">
                         {r.category}
                       </span>
                     )}
                   </div>
                 </div>
-                <ArrowRight className="w-4 h-4 text-gray-300" />
+                <ArrowRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
               </Link>
             ))}
           </div>

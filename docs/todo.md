@@ -79,10 +79,10 @@
 - [x] Redeploy with image fix
 
 ## QA Bug Fixes (Wave 6)
-- [ ] [CRITICAL] Fix В покупки button on Menu page — no visible effect on click
-- [ ] [HIGH] Home page: show recipe photo thumbnails instead of emoji icons
-- [ ] [HIGH] Recipe edit form: show existing photo in edit mode
-- [ ] [HIGH] Recipe edit form: pre-fill description textarea
-- [ ] [MEDIUM] Recipe edit form: pre-fill prep/cook time fields
-- [ ] [LOW] Products page: hide skeleton rows when showing empty state
-- [ ] [LOW] Home page: fix category text truncation
+- [x] [CRITICAL] Fix В покупки button on Menu page — теперь сразу ведёт на /shopping после генерации списка
+- [x] [HIGH] Home page: фото рецептов в "Последние рецепты" (img из imageUrl, фолбэк 🍽️ только если фото нет)
+- [x] [HIGH] Recipe edit form: existing photo показывается превью в режиме редактирования
+- [x] [HIGH] Recipe edit form: description textarea pre-filled из r.description
+- [x] [MEDIUM] Recipe edit form: prep/cook time pre-filled из r.prepTime / r.cookTime
+- [x] [LOW] Products page: skeleton rows убраны (есть только empty state)
+- [x] [LOW] Home page: обрезка категории — добавлены truncate + min-w-0 + flex-shrink-0 на меточный ряд
