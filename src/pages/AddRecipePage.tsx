@@ -41,6 +41,7 @@ export default function AddRecipePage() {
   const [hydrated, setHydrated] = useState(false);
   const [importUrl, setImportUrl] = useState('');
   const toasts = useToasts();
+  const utils = trpc.useUtils();
 
   // In edit mode, fetch existing recipe and prefill the form.
   const existing = trpc.recipes.getById.useQuery(
@@ -82,10 +83,26 @@ export default function AddRecipePage() {
   }, [isEditing, existing.data, hydrated]);
 
   const createMutation = trpc.recipes.create.useMutation({
-    onSuccess: (data) => navigate(`/recipes/${data.id}`),
+    onSuccess: (data) => {
+      utils.recipes.list.invalidate();
+      utils.recipes.getStats.invalidate();
+      toasts.push('Рецепт сохранён', 'success');
+      navigate(`/recipes/${data.id}`);
+    },
+    onError: (err) => {
+      toasts.push(err.message || 'Не удалось сохранить рецепт', 'error');
+    },
   });
   const updateMutation = trpc.recipes.update.useMutation({
-    onSuccess: () => navigate(`/recipes/${editingId}`),
+    onSuccess: () => {
+      utils.recipes.list.invalidate();
+      utils.recipes.getById.invalidate({ id: editingId! });
+      toasts.push('Изменения сохранены', 'success');
+      navigate(`/recipes/${editingId}`);
+    },
+    onError: (err) => {
+      toasts.push(err.message || 'Не удалось сохранить изменения', 'error');
+    },
   });
   const importMutation = trpc.recipes.importFromUrl.useMutation({
     onSuccess: (data) => {
@@ -125,10 +142,29 @@ export default function AddRecipePage() {
     e.preventDefault();
     const totalTime = (parseInt(prepTime) || 0) + (parseInt(cookTime) || 0);
 
+    // Sanity-check: trim everything and drop empty rows so the server
+    // doesn't reject on `name: z.string().min(1)` etc.
+    const cleanIngredients = ingredients
+      .map((i) => ({
+        name: i.name.trim(),
+        amount: i.amount ? parseFloat(i.amount) : null,
+        unit: i.unit.trim() || null,
+      }))
+      .filter((i) => i.name)
+      .map((i, idx) => ({ ...i, sortOrder: idx + 1 }));
+
+    const cleanSteps = steps
+      .map((s) => ({
+        instruction: s.instruction.trim(),
+        timerMinutes: s.timerMinutes ? parseInt(s.timerMinutes) : undefined,
+      }))
+      .filter((s) => s.instruction)
+      .map((s, idx) => ({ ...s, stepNumber: idx + 1 }));
+
     const payload = {
-      title,
-      description: description || undefined,
-      imageUrl: imageUrl || undefined,
+      title: title.trim(),
+      description: description.trim() || undefined,
+      imageUrl: imageUrl.trim() || undefined,
       servings: parseInt(servings) || 4,
       prepTime: parseInt(prepTime) || undefined,
       cookTime: parseInt(cookTime) || undefined,
@@ -137,21 +173,8 @@ export default function AddRecipePage() {
       cuisine: cuisine || undefined,
       difficulty,
       calories: parseInt(calories) || undefined,
-      ingredients: ingredients
-        .filter((i) => i.name.trim())
-        .map((i, idx) => ({
-          name: i.name.trim(),
-          amount: i.amount ? parseFloat(i.amount) : null,
-          unit: i.unit || null,
-          sortOrder: idx + 1,
-        })),
-      steps: steps
-        .filter((s) => s.instruction.trim())
-        .map((s, idx) => ({
-          stepNumber: idx + 1,
-          instruction: s.instruction.trim(),
-          timerMinutes: s.timerMinutes ? parseInt(s.timerMinutes) : undefined,
-        })),
+      ingredients: cleanIngredients,
+      steps: cleanSteps,
     };
 
     if (isEditing) {
@@ -281,7 +304,7 @@ export default function AddRecipePage() {
               </label>
               <div className="flex gap-3 items-start">
                 <input
-                  type="url"
+                  type="text"
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
                   className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
