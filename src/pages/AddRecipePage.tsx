@@ -329,15 +329,40 @@ export default function AddRecipePage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Категория</label>
-                <input type="text" value={category} onChange={(e) => setCategory(e.target.value)}
-                  placeholder="Супы, Основные блюда..."
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                <select value={category} onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+                  <option value="">— выберите —</option>
+                  <option value="Завтраки">Завтраки</option>
+                  <option value="Закуски">Закуски</option>
+                  <option value="Супы">Супы</option>
+                  <option value="Основные блюда">Основные блюда</option>
+                  <option value="Салаты">Салаты</option>
+                  <option value="Выпечка">Выпечка</option>
+                  <option value="Десерты">Десерты</option>
+                  <option value="Напитки">Напитки</option>
+                  <option value="Соусы">Соусы</option>
+                  <option value="Заготовки">Заготовки</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Кухня</label>
                 <input type="text" value={cuisine} onChange={(e) => setCuisine(e.target.value)}
                   placeholder="Русская, Итальянская..."
+                  list="cuisine-options"
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                <datalist id="cuisine-options">
+                  <option value="Русская" />
+                  <option value="Украинская" />
+                  <option value="Итальянская" />
+                  <option value="Французская" />
+                  <option value="Грузинская" />
+                  <option value="Азиатская" />
+                  <option value="Японская" />
+                  <option value="Китайская" />
+                  <option value="Мексиканская" />
+                  <option value="Голландская" />
+                  <option value="Восточная" />
+                </datalist>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Сложность</label>
