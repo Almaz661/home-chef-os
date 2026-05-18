@@ -1,0 +1,44 @@
+# Render.com Blueprint для ШефДома.
+#
+# ВАЖНО: бесплатный план Render НЕ поддерживает persistent disk.
+# На free instance SQLite пропадает при каждом засыпании (через 15 мин
+# простоя). Для долговременных данных используйте Starter ($7/мес) +
+# раскомментируйте секцию `disk` ниже, либо разверните на Fly.io
+# (см. fly.toml).
+#
+# Для демо/теста бесплатного достаточно — приложение пересеет начальные
+# данные при каждом старте.
+#
+# Использование:
+#   1. https://dashboard.render.com/blueprints → New Blueprint Instance
+#   2. Подключите репо Almaz661/home-chef-os
+#   3. После деплоя — Environment → опционально добавьте API-ключи
+
+services:
+  - type: web
+    name: home-chef-os
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      # Без диска — эфемерная БД. На Starter раскомментируйте `disk`
+      # и выставьте: DB_PATH=/var/data/homechef.db
+      - key: OCR_SPACE_API_KEY
+        sync: false
+      - key: GOOGLE_VISION_API_KEY
+        sync: false
+      - key: DEEPL_API_KEY
+        sync: false
+      - key: GOOGLE_TRANSLATE_API_KEY
+        sync: false
+    # disk:                       # требует Starter ($7/мес)
+    #   name: data
+    #   mountPath: /var/data
+    #   sizeGB: 1

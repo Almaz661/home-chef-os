@@ -94,6 +94,10 @@ export const purchaseItems = sqliteTable('purchase_items', {
 export const productMaster = sqliteTable('product_master', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
+  /** Dutch name, used to match products when scanning Dutch receipts. */
+  nameNl: text('name_nl'),
+  /** English name (for future imports / API matching). */
+  nameEn: text('name_en'),
   defaultUnit: text('default_unit'),
   category: text('category'),
 });
@@ -112,15 +116,35 @@ export const receipts = sqliteTable('receipts', {
   totalAmount: real('total_amount'),
   currency: text('currency').default('EUR'),
   imageUrl: text('image_url'),
+  /** 'pending' | 'parsed' | 'imported' | 'failed' */
+  status: text('status').default('pending'),
+  /** which OCR provider produced the items, if any */
+  ocrProvider: text('ocr_provider'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
 });
 
 export const receiptItems = sqliteTable('receipt_items', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   receiptId: integer('receipt_id').notNull().references(() => receipts.id, { onDelete: 'cascade' }),
+  /** Russian display name (after translation, if any). */
   productName: text('product_name').notNull(),
+  /** Original-language name (e.g. NL from a Dutch receipt). */
+  originalName: text('original_name'),
   quantity: real('quantity'),
   unit: text('unit'),
   price: real('price'),
   currency: text('currency').default('EUR'),
+  /** Linked product_master id (after auto-match or user confirmation). */
+  matchedProductId: integer('matched_product_id').references(() => productMaster.id),
+  /** Has the user already pushed this row into inventory? */
+  wasAddedToInventory: integer('was_added_to_inventory', { mode: 'boolean' }).default(false),
+});
+
+/** Cached FX rates so we don't call the upstream API on every page load. */
+export const exchangeRates = sqliteTable('exchange_rates', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  base: text('base').notNull(),
+  quote: text('quote').notNull(),
+  rate: real('rate').notNull(),
+  fetchedAt: text('fetched_at').notNull().default(sql`(datetime('now'))`),
 });

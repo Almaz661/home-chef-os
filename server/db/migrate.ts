@@ -1,10 +1,6 @@
 import Database from 'better-sqlite3';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, dirname, resolve } from 'node:path';
 import { mkdirSync } from 'node:fs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 /**
  * Migrations are versioned via PRAGMA user_version.
@@ -152,15 +148,42 @@ ALTER TABLE purchase_items ADD COLUMN needed_quantity REAL;
 ALTER TABLE purchase_items ADD COLUMN in_stock_quantity REAL DEFAULT 0;
 `;
 
+// V3: receipts + i18n metadata
+//   - receipt_items.matched_product_id: link to product_master (after OCR + matching)
+//   - receipt_items.was_added_to_inventory: prevent double-counting on re-import
+//   - receipt_items.original_name: NL or other source language; product_name is RU
+//   - product_master.name_nl: known NL name (for matching/scanning Dutch receipts)
+//   - exchange_rates: cached daily EUR->RUB (and others)
+const SCHEMA_V3 = `
+ALTER TABLE receipt_items ADD COLUMN matched_product_id INTEGER REFERENCES product_master(id);
+ALTER TABLE receipt_items ADD COLUMN was_added_to_inventory INTEGER DEFAULT 0;
+ALTER TABLE receipt_items ADD COLUMN original_name TEXT;
+ALTER TABLE receipts ADD COLUMN status TEXT DEFAULT 'pending';
+ALTER TABLE receipts ADD COLUMN ocr_provider TEXT;
+
+ALTER TABLE product_master ADD COLUMN name_nl TEXT;
+ALTER TABLE product_master ADD COLUMN name_en TEXT;
+
+CREATE TABLE IF NOT EXISTS exchange_rates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  base TEXT NOT NULL,
+  quote TEXT NOT NULL,
+  rate REAL NOT NULL,
+  fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(base, quote)
+);
+`;
+
 const MIGRATIONS: Array<{ version: number; sql: string }> = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
+  { version: 3, sql: SCHEMA_V3 },
 ];
 
 export function runMigrations() {
   const dbPath = process.env.DB_PATH
-    ? process.env.DB_PATH
-    : join(__dirname, '..', '..', 'data', 'homechef.db');
+    ? resolve(process.env.DB_PATH)
+    : join(process.cwd(), 'data', 'homechef.db');
 
   mkdirSync(dirname(dbPath), { recursive: true });
 

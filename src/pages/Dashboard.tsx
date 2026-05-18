@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, Calendar, ShoppingCart, Package, Plus, ArrowRight, Clock } from 'lucide-react';
+import { BookOpen, Calendar, ShoppingCart, Package, Plus, ArrowRight, Clock, Camera } from 'lucide-react';
 import { trpc } from '../utils/trpc';
 
 export default function Dashboard() {
@@ -80,7 +80,7 @@ export default function Dashboard() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
         <Link
           to="/recipes/add"
           className="flex items-center gap-3 p-4 bg-primary-50 hover:bg-primary-100 rounded-2xl transition-colors"
@@ -88,9 +88,9 @@ export default function Dashboard() {
           <div className="w-10 h-10 bg-primary-600 text-white rounded-xl flex items-center justify-center">
             <Plus className="w-5 h-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="font-medium text-primary-900">Новый рецепт</div>
-            <div className="text-xs text-primary-700">Создать или импортировать</div>
+            <div className="text-xs text-primary-700 truncate">Создать или импортировать</div>
           </div>
         </Link>
 
@@ -101,9 +101,9 @@ export default function Dashboard() {
           <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center">
             <Calendar className="w-5 h-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="font-medium text-blue-900">Меню недели</div>
-            <div className="text-xs text-blue-700">Спланировать питание</div>
+            <div className="text-xs text-blue-700 truncate">Спланировать питание</div>
           </div>
         </Link>
 
@@ -114,9 +114,22 @@ export default function Dashboard() {
           <div className="w-10 h-10 bg-green-600 text-white rounded-xl flex items-center justify-center">
             <ShoppingCart className="w-5 h-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="font-medium text-green-900">Покупки</div>
-            <div className="text-xs text-green-700">Список на сегодня</div>
+            <div className="text-xs text-green-700 truncate">Список на сегодня</div>
+          </div>
+        </Link>
+
+        <Link
+          to="/receipts"
+          className="flex items-center gap-3 p-4 bg-purple-50 hover:bg-purple-100 rounded-2xl transition-colors"
+        >
+          <div className="w-10 h-10 bg-purple-600 text-white rounded-xl flex items-center justify-center">
+            <Camera className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium text-purple-900">Сканер чеков</div>
+            <div className="text-xs text-purple-700 truncate">Фото → инвентарь</div>
           </div>
         </Link>
       </div>

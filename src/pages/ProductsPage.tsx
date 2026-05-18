@@ -6,7 +6,12 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ name: '', defaultUnit: '', category: '' });
+  const [form, setForm] = useState({
+    name: '',
+    nameNl: '',
+    defaultUnit: '',
+    category: '',
+  });
 
   const products = trpc.products.list.useQuery({ search: search || undefined });
   const categories = trpc.products.getCategories.useQuery();
@@ -15,7 +20,7 @@ export default function ProductsPage() {
   const removeMutation = trpc.products.remove.useMutation({ onSuccess: () => products.refetch() });
 
   const resetForm = () => {
-    setForm({ name: '', defaultUnit: '', category: '' });
+    setForm({ name: '', nameNl: '', defaultUnit: '', category: '' });
     setShowAdd(false);
     setEditingId(null);
   };
@@ -32,7 +37,12 @@ export default function ProductsPage() {
 
   const startEdit = (item: any) => {
     setEditingId(item.id);
-    setForm({ name: item.name, defaultUnit: item.defaultUnit || '', category: item.category || '' });
+    setForm({
+      name: item.name,
+      nameNl: item.nameNl || '',
+      defaultUnit: item.defaultUnit || '',
+      category: item.category || '',
+    });
     setShowAdd(true);
   };
 
@@ -74,16 +84,25 @@ export default function ProductsPage() {
 
       {/* Add/Edit form */}
       {showAdd && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-100 p-4 mb-6">
-          <div className="flex gap-3">
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-100 p-4 mb-6 space-y-3">
+          <div className="flex flex-wrap gap-3">
             <input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Название продукта *"
+              placeholder="Название (RU) *"
               required
-              className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="flex-1 min-w-[200px] px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
+            <input
+              type="text"
+              value={form.nameNl}
+              onChange={(e) => setForm({ ...form, nameNl: e.target.value })}
+              placeholder="Название (NL, для чеков)"
+              className="flex-1 min-w-[200px] px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="flex flex-wrap gap-3">
             <input
               type="text"
               value={form.defaultUnit}
@@ -96,10 +115,12 @@ export default function ProductsPage() {
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
               placeholder="Категория"
-              className="w-32 px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="flex-1 min-w-[160px] px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
-            <button type="submit"
-              className="px-4 py-3 bg-primary-600 rounded-xl text-sm font-medium text-white hover:bg-primary-700">
+            <button
+              type="submit"
+              className="px-4 py-3 bg-primary-600 rounded-xl text-sm font-medium text-white hover:bg-primary-700"
+            >
               {editingId ? 'Сохранить' : 'Добавить'}
             </button>
           </div>
@@ -120,6 +141,9 @@ export default function ProductsPage() {
                     <span className="font-medium text-gray-900">{product.name}</span>
                     {product.defaultUnit && (
                       <span className="text-sm text-gray-500 ml-2">({product.defaultUnit})</span>
+                    )}
+                    {product.nameNl && (
+                      <div className="text-xs text-gray-400 mt-0.5">NL: {product.nameNl}</div>
                     )}
                   </div>
                   <button onClick={() => startEdit(product)}

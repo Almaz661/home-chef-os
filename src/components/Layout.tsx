@@ -1,6 +1,15 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, BookOpen, Calendar, ShoppingCart, Package, LogOut, ChefHat } from 'lucide-react';
+import {
+  Home,
+  BookOpen,
+  Calendar,
+  ShoppingCart,
+  Package,
+  LogOut,
+  ChefHat,
+  Receipt,
+} from 'lucide-react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -14,6 +23,7 @@ const navItems = [
   { path: '/menu', label: 'Меню', icon: Calendar },
   { path: '/shopping', label: 'Покупки', icon: ShoppingCart },
   { path: '/inventory', label: 'Инвентарь', icon: Package },
+  { path: '/receipts', label: 'Чеки', icon: Receipt },
 ];
 
 export default function Layout({ children, userName, onLogout }: LayoutProps) {

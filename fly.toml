@@ -1,0 +1,46 @@
+# Fly.io configuration. Bесплатный тариф предоставляет persistent volume
+# (3GB), что идеально для SQLite. Требует регистрации с банковской
+# картой (но free tier без списаний при умеренном трафике).
+#
+# Setup (один раз):
+#   curl -L https://fly.io/install.sh | sh
+#   flyctl auth signup
+#   flyctl launch --no-deploy        # принимает параметры из этого файла
+#   flyctl volumes create homechef_data --region ams --size 1
+#   flyctl secrets set OCR_SPACE_API_KEY=...   # опционально
+#   flyctl secrets set DEEPL_API_KEY=...       # опционально
+#   flyctl deploy
+
+app = "home-chef-os"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  DB_PATH = "/var/data/homechef.db"
+
+[[mounts]]
+  source = "homechef_data"
+  destination = "/var/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/api/health"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256

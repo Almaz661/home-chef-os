@@ -1,15 +1,22 @@
 import { z } from 'zod';
 import { router, publicProcedure } from '../trpc.js';
 import { db, schema } from '../db/index.js';
-import { eq, like, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 export const productsRouter = router({
   list: publicProcedure
     .input(z.object({ search: z.string().optional() }).optional())
     .query(async ({ input }) => {
       if (input?.search) {
-        return db.select().from(schema.productMaster)
-          .where(like(schema.productMaster.name, `%${input.search}%`))
+        const term = `%${input.search}%`;
+        return db
+          .select()
+          .from(schema.productMaster)
+          .where(
+            sql`${schema.productMaster.name} LIKE ${term}
+                OR ${schema.productMaster.nameNl} LIKE ${term}
+                OR ${schema.productMaster.nameEn} LIKE ${term}`,
+          )
           .orderBy(schema.productMaster.category, schema.productMaster.name)
           .all();
       }
@@ -21,6 +28,8 @@ export const productsRouter = router({
   add: publicProcedure
     .input(z.object({
       name: z.string().min(1),
+      nameNl: z.string().optional(),
+      nameEn: z.string().optional(),
       defaultUnit: z.string().optional(),
       category: z.string().optional(),
     }))
@@ -33,6 +42,8 @@ export const productsRouter = router({
     .input(z.object({
       id: z.number(),
       name: z.string().optional(),
+      nameNl: z.string().nullable().optional(),
+      nameEn: z.string().nullable().optional(),
       defaultUnit: z.string().optional(),
       category: z.string().optional(),
     }))

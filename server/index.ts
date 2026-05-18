@@ -45,7 +45,9 @@ async function main() {
 
   // In production, serve the built frontend
   if (NODE_ENV === 'production') {
-    const distDir = path.resolve(__dirname, '..', 'dist');
+    // When compiled, this file lives at dist-server/server/index.js,
+    // and the client bundle is at dist/. So we go two levels up.
+    const distDir = path.resolve(__dirname, '..', '..', 'dist');
     if (existsSync(distDir)) {
       app.use(express.static(distDir));
       app.get('*', (_req, res) => {

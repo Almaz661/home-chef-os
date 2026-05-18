@@ -10,6 +10,8 @@ import MenuPage from './pages/MenuPage';
 import ShoppingPage from './pages/ShoppingPage';
 import InventoryPage from './pages/InventoryPage';
 import ProductsPage from './pages/ProductsPage';
+import ReceiptsPage from './pages/ReceiptsPage';
+import ReceiptDetailPage from './pages/ReceiptDetailPage';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -54,6 +56,8 @@ function App() {
         <Route path="/shopping" element={<ShoppingPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/products" element={<ProductsPage />} />
+        <Route path="/receipts" element={<ReceiptsPage />} />
+        <Route path="/receipts/:id" element={<ReceiptDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
