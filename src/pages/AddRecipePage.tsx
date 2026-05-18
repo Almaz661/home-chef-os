@@ -343,7 +343,7 @@ export default function AddRecipePage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Сложность</label>
                 <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                  <option value="easy">Легко</option>
+                  <option value="easy">Просто</option>
                   <option value="medium">Средне</option>
                   <option value="hard">Сложно</option>
                 </select>
@@ -451,7 +451,7 @@ export default function AddRecipePage() {
             disabled={!title.trim() || isPending}
             className="px-6 py-3 bg-primary-600 rounded-xl text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
           >
-            {isPending ? 'Сохранение...' : isEditing ? 'Сохранить изменения' : 'Сохранить рецепт'}
+            {isPending ? 'Сохранение...' : isEditing ? 'Сохранить изменения' : 'Добавить рецепт'}
           </button>
         </div>
       </form>
