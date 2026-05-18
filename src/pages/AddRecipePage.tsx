@@ -346,23 +346,14 @@ export default function AddRecipePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Кухня</label>
-                <input type="text" value={cuisine} onChange={(e) => setCuisine(e.target.value)}
-                  placeholder="Русская, Итальянская..."
-                  list="cuisine-options"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                <datalist id="cuisine-options">
-                  <option value="Русская" />
-                  <option value="Украинская" />
-                  <option value="Итальянская" />
-                  <option value="Французская" />
-                  <option value="Грузинская" />
-                  <option value="Азиатская" />
-                  <option value="Японская" />
-                  <option value="Китайская" />
-                  <option value="Мексиканская" />
-                  <option value="Голландская" />
-                  <option value="Восточная" />
-                </datalist>
+                <select value={cuisine} onChange={(e) => setCuisine(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+                  <option value="">— выберите —</option>
+                  <option value="Русская">Русская</option>
+                  <option value="Итальянская">Итальянская</option>
+                  <option value="Французская">Французская</option>
+                  <option value="Другая">Другая</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Сложность</label>
