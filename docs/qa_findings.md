@@ -98,13 +98,15 @@
 - No other JS errors found
 
 ## Summary of Bugs to Fix
-1. [CRITICAL] В покупки button on Menu page — appears to not work (no toast, no navigation, no visible effect)
-2. [HIGH] Home page: Latest recipes show emoji icons instead of recipe photo thumbnails
-3. [HIGH] Recipe edit form: existing photo not shown (shows upload placeholder)
-4. [HIGH] Recipe edit form: description textarea not pre-filled with existing description
-5. [MEDIUM] Recipe edit form: prep/cook time fields empty even when recipe has values
-6. [LOW] Products page: skeleton rows visible alongside empty state message
-7. [LOW] Category text truncation on Home page ("Сыровял" instead of full text)
+1. ~~[CRITICAL] В покупки button on Menu page — appears to not work~~ — FIXED: после генерации списка автоматически navigate('/shopping')
+2. ~~[HIGH] Home page: Latest recipes show emoji icons instead of recipe photo thumbnails~~ — FIXED: рендер `<img src={r.imageUrl}>` с фолбэком 🍽️
+3. ~~[HIGH] Recipe edit form: existing photo not shown~~ — FIXED: `setImageUrl(r.imageUrl ?? '')` + блок превью
+4. ~~[HIGH] Recipe edit form: description textarea not pre-filled~~ — FIXED: `setDescription(r.description ?? '')`
+5. ~~[MEDIUM] Recipe edit form: prep/cook time fields empty~~ — FIXED: гидратируется из `r.prepTime` / `r.cookTime`
+6. ~~[LOW] Products page: skeleton rows visible alongside empty state message~~ — FIXED: скелетонов в коде нет, есть только пустое состояние
+7. ~~[LOW] Category text truncation on Home page ("Сыровял" instead of full text)~~ — FIXED: добавлены `truncate min-w-0` на бэйдж категории + `flex-shrink-0 whitespace-nowrap` на время
+
+Все баги Wave 6 закрыты.
 
 ## Console Errors
 - Testing...
