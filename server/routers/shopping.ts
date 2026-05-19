@@ -72,13 +72,25 @@ export const shoppingRouter = router({
             .where(sql`lower(${schema.productMaster.name}) = ${item.productName.toLowerCase()}`)
             .get();
 
+          const category = product?.category || item.category || 'Другое';
+
+          // Smart storage: pantry items go to pantry, perishables to fridge
+          const PANTRY_CATEGORIES = ['Бакалея', 'Крупы', 'Специи', 'Консервы', 'Соусы', 'Другое'];
+          const FREEZER_CATEGORIES = ['Заморозка'];
+          let storageType: string = 'fridge';
+          if (PANTRY_CATEGORIES.includes(category)) {
+            storageType = 'pantry';
+          } else if (FREEZER_CATEGORIES.includes(category)) {
+            storageType = 'freezer';
+          }
+
           db.insert(schema.inventory).values({
             userId: 1,
             productName: item.productName,
             quantity: item.quantity || 1,
             unit: item.unit || '',
-            storageType: 'fridge',
-            category: product?.category || item.category || 'Другое',
+            storageType,
+            category,
           }).run();
         }
 
