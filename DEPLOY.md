@@ -1,124 +1,92 @@
 # Деплой ШефДома
 
-## Что выбрать
+## Главное изменение
 
-| Платформа | Бесплатно? | Persistent БД? | Сложность | Когда выбирать |
-|---|---|---|---|---|
-| **Render.com Free** | да, без карты | ❌ (БД пропадает) | очень просто | посмотреть как работает, для демо |
-| **Render.com Starter** | $7/мес | ✅ | очень просто | реальное использование, не хочется возиться |
-| **Fly.io Free** | да, нужна карта | ✅ (3GB volume) | средне | реальное использование без месячной платы |
-| **Свой VPS / домашний сервер** | зависит | ✅ | сложно | если у вас уже есть |
+С этого момента приложение хранит данные в **Neon PostgreSQL** (или любом
+другом внешнем PostgreSQL), а **не в локальном SQLite-файле**. Это значит:
 
-> **Рекомендация:** начните с **Render Free** — деплоится за 5 минут одной кнопкой,
-> чтобы убедиться что всё работает. Потом — Fly.io для постоянной работы.
+- ✅ Данные **переживают** деплои, перезапуски, миграции инстансов
+- ✅ Free-план Render теперь полностью пригоден для постоянного использования
+- ⚠️ Перед запуском **обязательно** установите `DATABASE_URL`
+- ⚠️ Старые SQLite-файлы (`data/homechef.db`) больше не используются
 
----
+## Шаг 0: получить DATABASE_URL из Neon
 
-## Вариант 1: Render.com Free (5 минут)
-
-1. Зарегистрируйтесь на https://render.com (через GitHub — быстрее всего)
-2. Откройте https://dashboard.render.com/blueprints
-3. Нажмите **New Blueprint Instance**
-4. Выберите репозиторий `Almaz661/home-chef-os`
-5. Render автоматически найдёт `render.yaml` и создаст веб-сервис
-6. Подождите 3–5 минут, пока пройдёт первый билд
-7. Откройте URL вида `https://home-chef-os.onrender.com`
-8. Войдите по PIN **1234**
-
-**Минусы Free:** инстанс засыпает через 15 минут простоя (первый запрос
-после засыпания — 30–60 секунд), и **БД сбрасывается при каждом засыпании**.
-Подходит для теста. Для реальных данных — Starter ($7/мес) или Fly.io.
-
-### Включить OCR/перевод/реальный курс
-
-После деплоя в Render Dashboard → ваш сервис → **Environment**:
-
-| Переменная | Где взять | Что даёт |
-|---|---|---|
-| `OCR_SPACE_API_KEY` | https://ocr.space/ocrapi (раздел "Free API key") | Сканирование чеков (25 000/мес) |
-| `DEEPL_API_KEY` | https://www.deepl.com/pro-api → "DeepL API Free" | Перевод NL → RU (500 000 символов/мес) |
-
-После добавления нажмите **Save Changes** — Render сам передеплоит.
-
----
-
-## Вариант 2: Fly.io (постоянная БД, бесплатно)
-
-1. Установите CLI:
-   ```bash
-   curl -L https://fly.io/install.sh | sh
+1. Зайдите на https://console.neon.tech
+2. Выберите ваш проект (или создайте новый — Free план достаточен)
+3. Connection Details → **«Pooled connection»**
+4. Скопируйте строку вида:
    ```
-2. Зарегистрируйтесь:
-   ```bash
-   flyctl auth signup
+   postgres://USER:PASSWORD@ep-XXXX-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
    ```
-3. В корне проекта:
-   ```bash
-   flyctl launch --copy-config --no-deploy
-   flyctl volumes create homechef_data --region ams --size 1
-   flyctl deploy
-   ```
-4. (Опционально) добавьте ключи:
-   ```bash
-   flyctl secrets set OCR_SPACE_API_KEY=...
-   flyctl secrets set DEEPL_API_KEY=...
-   ```
-5. Откройте `https://home-chef-os.fly.dev`
 
----
+> Важно использовать **pooled** строку (через pgbouncer) — она лучше
+> работает с эпизодическими подключениями Render Free.
 
-## Вариант 3: локально
+## Render.com (рекомендуется)
 
-Подходит если у вас есть домашний сервер или Mac/Linux машина:
+1. https://dashboard.render.com/blueprints → **New Blueprint Instance**
+2. Подключите репо `Almaz661/home-chef-os`
+3. Render найдёт `render.yaml` и создаст веб-сервис.
+   **Auto-deploy в render.yaml уже отключён** — это значит, что повторный
+   пуш в репозиторий НЕ запустит автоматический передеплой.
+4. После создания: ваш сервис → **Environment** → добавьте:
+   - `DATABASE_URL` = строка из Neon (шаг 0)
+   - (опционально) `OCR_SPACE_API_KEY`, `DEEPL_API_KEY` и т.д.
+5. **Manual Deploy** → Deploy latest commit
+6. Откройте URL вида `https://home-chef-os.onrender.com`. Войдите по PIN `1234`.
+
+При первом запуске сервер сам выполнит миграции и сидинг
+(пользователь + базовый каталог продуктов). **Рецепты сидом не
+загружаются** — добавьте свои через UI («Импорт» или «Импорт раздела»).
+
+## Fly.io (альтернатива)
 
 ```bash
-git clone https://github.com/Almaz661/home-chef-os.git
-cd home-chef-os
-npm install
-cp .env.example .env  # отредактируйте если нужно
-npm run build
-npm start
+curl -L https://fly.io/install.sh | sh
+flyctl auth signup
+flyctl launch --no-deploy
+flyctl secrets set DATABASE_URL='postgres://...?sslmode=require'
+flyctl deploy
 ```
 
-Откройте `http://localhost:3000`.
+`fly.toml` уже настроен на работу с внешним PostgreSQL — persistent volume
+больше не используется.
 
----
+## Локальная разработка
 
-## Получить API-ключи
+```bash
+cp .env.example .env
+# отредактируйте .env, поставьте DATABASE_URL (можно тот же Neon или
+# локальный postgres через docker)
+npm install
+npm run db:migrate
+npm run db:seed
+npm run dev
+```
 
-### OCR.space (для сканирования чеков)
+Локальный PostgreSQL для разработки:
+```bash
+docker run -d --name chefdom-pg \
+  -e POSTGRES_PASSWORD=dev \
+  -e POSTGRES_USER=dev \
+  -e POSTGRES_DB=chefdom \
+  -p 5432:5432 postgres:16
 
-1. Зайдите на https://ocr.space/ocrapi
-2. Прокрутите до **"Free API key"** (синяя кнопка)
-3. Введите email → ключ придёт на почту мгновенно
-4. Скопируйте — это и есть `OCR_SPACE_API_KEY`
+# .env:
+# DATABASE_URL=postgres://dev:dev@localhost:5432/chefdom?sslmode=disable
+```
 
-Лимит: 25 000 запросов/месяц, поддерживает голландский.
+## Импорт рецептов
 
-### DeepL (для перевода NL → RU)
+После запуска приложения зайдите в **Рецепты** и используйте:
 
-1. Зайдите на https://www.deepl.com/pro-api
-2. Выберите **"DeepL API Free"** → нажмите **"Sign up for free"**
-3. Зарегистрируйтесь (нужна карта для верификации, но списаний на Free плане нет)
-4. После входа — раздел **"Account"** → **"Authentication Key for DeepL API"**
-5. Скопируйте ключ — это и есть `DEEPL_API_KEY`
-
-Лимит: 500 000 символов/месяц. Один чек ≈ 200–500 символов.
-
-### Курс EUR → RUB
-
-**Не нужен ключ!** Используются открытые API: Frankfurter (ECB) и open.er-api.com.
-Курс автоматически кэшируется на 24 часа.
-
----
-
-## Если что-то пошло не так
-
-- **«Application failed to respond» на Render:** инстанс засыпает.
-  Подождите 30–60 секунд и обновите страницу.
-- **«Cannot find module 'better-sqlite3'»:** проверьте, что Node v22 (на Render
-  выставляется через `NODE_VERSION=22`).
-- **«Невозможно сохранить рецепт»:** проверьте логи сервера, возможно БД
-  read-only. На Render Free это нормально — при следующем деплое БД пересоздастся.
-- **Любая другая ошибка:** скиньте мне через PR-комментарий или новое сообщение,
-  разберёмся.
+- **Импорт** — вставьте ссылку на один рецепт, получите один рецепт.
+  Поддерживаются сайты с разметкой Schema.org (menunedeli.ru, povar.ru,
+  iamcook.ru, eda.ru и большинство других).
+- **Импорт раздела** — вставьте ссылку на категорию-каталог
+  (например `https://menunedeli.ru/.../salaty/`), нажмите «Начать импорт».
+  Сервер найдёт все ссылки на рецепты на странице (плюс пагинацию) и
+  загрузит каждый по очереди — с фотографиями. В диалоге показывается
+  прогресс: «Загружено X из Y», список добавленных рецептов и список ошибок.
+  Можно прервать в любой момент — добавленные ранее рецепты сохранятся.

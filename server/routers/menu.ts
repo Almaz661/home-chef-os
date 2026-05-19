@@ -7,34 +7,42 @@ export const menuRouter = router({
   getWeek: publicProcedure
     .input(z.object({ weekStartDate: z.string() }))
     .query(async ({ input }) => {
-      let menu = db.select().from(schema.menus)
+      let [menu] = await db
+        .select()
+        .from(schema.menus)
         .where(eq(schema.menus.weekStartDate, input.weekStartDate))
-        .get();
+        .limit(1);
 
       if (!menu) {
-        const result = db.insert(schema.menus).values({
-          userId: 1,
-          weekStartDate: input.weekStartDate,
-        }).run();
-        menu = db.select().from(schema.menus)
-          .where(eq(schema.menus.id, Number(result.lastInsertRowid)))
-          .get()!;
+        const [created] = await db
+          .insert(schema.menus)
+          .values({
+            userId: 1,
+            weekStartDate: input.weekStartDate,
+          })
+          .returning();
+        menu = created;
       }
 
-      const items = db.select().from(schema.menuItems)
-        .where(eq(schema.menuItems.menuId, menu.id))
-        .all();
+      const items = await db
+        .select()
+        .from(schema.menuItems)
+        .where(eq(schema.menuItems.menuId, menu.id));
 
-      // Get recipe details for each item
-      const itemsWithRecipes = await Promise.all(items.map(async (item) => {
-        if (item.recipeId) {
-          const recipe = db.select().from(schema.recipes)
-            .where(eq(schema.recipes.id, item.recipeId))
-            .get();
-          return { ...item, recipe };
-        }
-        return { ...item, recipe: null };
-      }));
+      // Hydrate recipes
+      const itemsWithRecipes = await Promise.all(
+        items.map(async (item) => {
+          if (item.recipeId) {
+            const [recipe] = await db
+              .select()
+              .from(schema.recipes)
+              .where(eq(schema.recipes.id, item.recipeId))
+              .limit(1);
+            return { ...item, recipe: recipe ?? null };
+          }
+          return { ...item, recipe: null };
+        }),
+      );
 
       return { menu, items: itemsWithRecipes };
     }),
@@ -47,19 +55,22 @@ export const menuRouter = router({
       recipeId: z.number(),
     }))
     .mutation(async ({ input }) => {
-      const result = db.insert(schema.menuItems).values({
-        menuId: input.menuId,
-        dayOfWeek: input.dayOfWeek,
-        mealType: input.mealType,
-        recipeId: input.recipeId,
-      }).run();
-      return { id: Number(result.lastInsertRowid) };
+      const [{ id }] = await db
+        .insert(schema.menuItems)
+        .values({
+          menuId: input.menuId,
+          dayOfWeek: input.dayOfWeek,
+          mealType: input.mealType,
+          recipeId: input.recipeId,
+        })
+        .returning({ id: schema.menuItems.id });
+      return { id };
     }),
 
   removeItem: publicProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      db.delete(schema.menuItems).where(eq(schema.menuItems.id, input.id)).run();
+      await db.delete(schema.menuItems).where(eq(schema.menuItems.id, input.id));
       return { success: true };
     }),
 
@@ -67,13 +78,11 @@ export const menuRouter = router({
     .input(z.object({ menuId: z.number() }))
     .mutation(async ({ input }) => {
       // 1. Collect all menu items with recipes
-      const items = db.select().from(schema.menuItems)
-        .where(eq(schema.menuItems.menuId, input.menuId))
-        .all();
+      const items = await db
+        .select()
+        .from(schema.menuItems)
+        .where(eq(schema.menuItems.menuId, input.menuId));
 
-      // 2. Aggregate ingredients across all menu recipes.
-      // Key combines normalized name + unit, so "молоко мл" and "молоко л"
-      // stay separate.
       type Aggregated = {
         displayName: string;
         quantity: number;
@@ -84,9 +93,10 @@ export const menuRouter = router({
 
       for (const item of items) {
         if (!item.recipeId) continue;
-        const ingredients = db.select().from(schema.recipeIngredients)
-          .where(eq(schema.recipeIngredients.recipeId, item.recipeId))
-          .all();
+        const ingredients = await db
+          .select()
+          .from(schema.recipeIngredients)
+          .where(eq(schema.recipeIngredients.recipeId, item.recipeId));
 
         for (const ing of ingredients) {
           const nameKey = ing.name.toLowerCase().trim();
@@ -98,10 +108,11 @@ export const menuRouter = router({
           if (existing) {
             existing.quantity += amount;
           } else {
-            // Look up category from product master
-            const product = db.select().from(schema.productMaster)
+            const [product] = await db
+              .select()
+              .from(schema.productMaster)
               .where(sql`lower(${schema.productMaster.name}) = ${nameKey}`)
-              .get();
+              .limit(1);
             ingredientMap.set(key, {
               displayName: ing.name.charAt(0).toUpperCase() + ing.name.slice(1),
               quantity: amount,
@@ -112,10 +123,9 @@ export const menuRouter = router({
         }
       }
 
-      // 3. Subtract inventory. Match by normalized name + unit;
-      // also try a "name only" fallback if units are different but same product.
-      const inventoryItems = db.select().from(schema.inventory).all();
-      const inStockMap = new Map<string, number>(); // key -> in-stock amount used
+      // 2. Subtract inventory (FEFO ignored here — we only care about totals).
+      const inventoryItems = await db.select().from(schema.inventory);
+      const inStockMap = new Map<string, number>();
 
       for (const inv of inventoryItems) {
         if (!inv.quantity || inv.quantity <= 0) continue;
@@ -123,11 +133,9 @@ export const menuRouter = router({
         const unitKey = (inv.unit || '').toLowerCase().trim();
         const exactKey = `${nameKey}|${unitKey}`;
 
-        // Try exact match first (same name + unit)
         let target = ingredientMap.get(exactKey);
         let targetKey = exactKey;
 
-        // Fallback: any unit, same name
         if (!target) {
           for (const [k, v] of ingredientMap) {
             if (k.startsWith(`${nameKey}|`)) {
@@ -145,25 +153,24 @@ export const menuRouter = router({
         }
       }
 
-      // 4. Make idempotent: remove only auto-generated rows; keep manually
-      // added items (they have recipeSource = NULL or a different value).
-      db.delete(schema.purchaseItems)
-        .where(and(
-          eq(schema.purchaseItems.userId, 1),
-          eq(schema.purchaseItems.recipeSource, 'menu'),
-        ))
-        .run();
+      // 3. Idempotent: drop only auto-generated rows.
+      await db
+        .delete(schema.purchaseItems)
+        .where(
+          and(
+            eq(schema.purchaseItems.userId, 1),
+            eq(schema.purchaseItems.recipeSource, 'menu'),
+          ),
+        );
 
-      // 5. Insert fresh rows with full context.
-      let insertedCount = 0;
+      // 4. Insert fresh rows.
+      const rowsToInsert: Array<typeof schema.purchaseItems.$inferInsert> = [];
       for (const [key, data] of ingredientMap) {
         const inStock = inStockMap.get(key) || 0;
         const needed = data.quantity + inStock;
-
-        // Skip if everything is already at home.
         if (data.quantity <= 0) continue;
 
-        db.insert(schema.purchaseItems).values({
+        rowsToInsert.push({
           userId: 1,
           productName: data.displayName,
           quantity: data.quantity,
@@ -173,10 +180,13 @@ export const menuRouter = router({
           recipeSource: 'menu',
           neededQuantity: needed,
           inStockQuantity: inStock,
-        }).run();
-        insertedCount++;
+        });
       }
 
-      return { count: insertedCount };
+      if (rowsToInsert.length > 0) {
+        await db.insert(schema.purchaseItems).values(rowsToInsert);
+      }
+
+      return { count: rowsToInsert.length };
     }),
 });

@@ -9,20 +9,20 @@ export const productsRouter = router({
     .query(async ({ input }) => {
       if (input?.search) {
         const term = `%${input.search}%`;
-        return db
+        return await db
           .select()
           .from(schema.productMaster)
           .where(
-            sql`${schema.productMaster.name} LIKE ${term}
-                OR ${schema.productMaster.nameNl} LIKE ${term}
-                OR ${schema.productMaster.nameEn} LIKE ${term}`,
+            sql`${schema.productMaster.name} ILIKE ${term}
+                OR ${schema.productMaster.nameNl} ILIKE ${term}
+                OR ${schema.productMaster.nameEn} ILIKE ${term}`,
           )
-          .orderBy(schema.productMaster.category, schema.productMaster.name)
-          .all();
+          .orderBy(schema.productMaster.category, schema.productMaster.name);
       }
-      return db.select().from(schema.productMaster)
-        .orderBy(schema.productMaster.category, schema.productMaster.name)
-        .all();
+      return await db
+        .select()
+        .from(schema.productMaster)
+        .orderBy(schema.productMaster.category, schema.productMaster.name);
     }),
 
   add: publicProcedure
@@ -34,8 +34,11 @@ export const productsRouter = router({
       category: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const result = db.insert(schema.productMaster).values(input).run();
-      return { id: Number(result.lastInsertRowid) };
+      const [{ id }] = await db
+        .insert(schema.productMaster)
+        .values(input)
+        .returning({ id: schema.productMaster.id });
+      return { id };
     }),
 
   update: publicProcedure
@@ -49,27 +52,27 @@ export const productsRouter = router({
     }))
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
-      db.update(schema.productMaster).set(data).where(eq(schema.productMaster.id, id)).run();
+      await db.update(schema.productMaster).set(data).where(eq(schema.productMaster.id, id));
       return { success: true };
     }),
 
   remove: publicProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      db.delete(schema.productMaster).where(eq(schema.productMaster.id, input.id)).run();
+      await db.delete(schema.productMaster).where(eq(schema.productMaster.id, input.id));
       return { success: true };
     }),
 
   getStats: publicProcedure.query(async () => {
-    const count = db.select({ count: sql<number>`count(*)` }).from(schema.productMaster).get();
-    return { total: count?.count || 0 };
+    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.productMaster);
+    return { total: row?.count || 0 };
   }),
 
   getCategories: publicProcedure.query(async () => {
-    const results = db.selectDistinct({ category: schema.productMaster.category })
+    const results = await db
+      .selectDistinct({ category: schema.productMaster.category })
       .from(schema.productMaster)
-      .where(sql`${schema.productMaster.category} IS NOT NULL`)
-      .all();
-    return results.map(r => r.category).filter(Boolean) as string[];
+      .where(sql`${schema.productMaster.category} IS NOT NULL`);
+    return results.map((r) => r.category).filter(Boolean) as string[];
   }),
 });

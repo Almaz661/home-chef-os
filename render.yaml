@@ -1,18 +1,19 @@
 # Render.com Blueprint для ШефДома.
 #
-# ВАЖНО: бесплатный план Render НЕ поддерживает persistent disk.
-# На free instance SQLite пропадает при каждом засыпании (через 15 мин
-# простоя). Для долговременных данных используйте Starter ($7/мес) +
-# раскомментируйте секцию `disk` ниже, либо разверните на Fly.io
-# (см. fly.toml).
+# С переходом на Neon PostgreSQL данные больше НЕ зависят от persistent
+# disk на Render. Можно использовать любой план, включая Free, без потери
+# данных при засыпании / передеплое.
 #
-# Для демо/теста бесплатного достаточно — приложение пересеет начальные
-# данные при каждом старте.
+# ПЕРЕД ДЕПЛОЕМ обязательно установите DATABASE_URL в Render Dashboard:
+#   1. Откройте https://console.neon.tech, выберите проект
+#   2. Connection Details → "Pooled connection"
+#   3. Скопируйте connection string (postgres://...?sslmode=require)
+#   4. В Render Dashboard → ваш сервис → Environment → Add → DATABASE_URL
 #
 # Использование:
 #   1. https://dashboard.render.com/blueprints → New Blueprint Instance
 #   2. Подключите репо Almaz661/home-chef-os
-#   3. После деплоя — Environment → опционально добавьте API-ключи
+#   3. После создания сервиса добавьте DATABASE_URL в Environment
 
 services:
   - type: web
@@ -23,13 +24,15 @@ services:
     buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
+    autoDeploy: false  # ОТКЛЮЧЕНО — деплоим вручную, чтобы не терять данные при пушах
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
         value: "22"
-      # Без диска — эфемерная БД. На Starter раскомментируйте `disk`
-      # и выставьте: DB_PATH=/var/data/homechef.db
+      # ОБЯЗАТЕЛЬНО — Neon connection string. Установите вручную в Dashboard.
+      - key: DATABASE_URL
+        sync: false
       - key: OCR_SPACE_API_KEY
         sync: false
       - key: GOOGLE_VISION_API_KEY
@@ -38,7 +41,3 @@ services:
         sync: false
       - key: GOOGLE_TRANSLATE_API_KEY
         sync: false
-    # disk:                       # требует Starter ($7/мес)
-    #   name: data
-    #   mountPath: /var/data
-    #   sizeGB: 1

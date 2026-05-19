@@ -5,9 +5,10 @@ import { eq, sql } from 'drizzle-orm';
 
 export const shoppingRouter = router({
   list: publicProcedure.query(async () => {
-    const items = db.select().from(schema.purchaseItems)
-      .orderBy(schema.purchaseItems.category, schema.purchaseItems.productName)
-      .all();
+    const items = await db
+      .select()
+      .from(schema.purchaseItems)
+      .orderBy(schema.purchaseItems.category, schema.purchaseItems.productName);
     return items;
   }),
 
@@ -19,103 +20,108 @@ export const shoppingRouter = router({
       category: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      // Check if same product already exists
-      const existing = db.select().from(schema.purchaseItems)
+      // Merge if same product already exists
+      const [existing] = await db
+        .select()
+        .from(schema.purchaseItems)
         .where(sql`lower(${schema.purchaseItems.productName}) = ${input.productName.toLowerCase()}`)
-        .get();
+        .limit(1);
 
       if (existing) {
-        db.update(schema.purchaseItems)
+        await db
+          .update(schema.purchaseItems)
           .set({ quantity: (existing.quantity || 0) + (input.quantity || 1) })
-          .where(eq(schema.purchaseItems.id, existing.id))
-          .run();
+          .where(eq(schema.purchaseItems.id, existing.id));
         return { id: existing.id };
       }
 
-      // Try to find category from product master
       let category = input.category;
       if (!category) {
-        const product = db.select().from(schema.productMaster)
+        const [product] = await db
+          .select()
+          .from(schema.productMaster)
           .where(sql`lower(${schema.productMaster.name}) = ${input.productName.toLowerCase()}`)
-          .get();
+          .limit(1);
         category = product?.category || 'Другое';
       }
 
-      const result = db.insert(schema.purchaseItems).values({
-        userId: 1,
-        productName: input.productName,
-        quantity: input.quantity || 1,
-        unit: input.unit || '',
-        category,
-        isChecked: false,
-      }).run();
-      return { id: Number(result.lastInsertRowid) };
+      const [{ id }] = await db
+        .insert(schema.purchaseItems)
+        .values({
+          userId: 1,
+          productName: input.productName,
+          quantity: input.quantity || 1,
+          unit: input.unit || '',
+          category,
+          isChecked: false,
+        })
+        .returning({ id: schema.purchaseItems.id });
+      return { id };
     }),
 
   toggleChecked: publicProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      const item = db.select().from(schema.purchaseItems)
+      const [item] = await db
+        .select()
+        .from(schema.purchaseItems)
         .where(eq(schema.purchaseItems.id, input.id))
-        .get();
-      if (item) {
-        const newChecked = !item.isChecked;
-        db.update(schema.purchaseItems)
-          .set({ isChecked: newChecked })
-          .where(eq(schema.purchaseItems.id, input.id))
-          .run();
+        .limit(1);
+      if (!item) return { success: true };
 
-        // ШефДом! Phase A: auto-add to inventory when checked
-        if (newChecked && item.productName) {
-          // Look up category from product master
-          const product = db.select().from(schema.productMaster)
-            .where(sql`lower(${schema.productMaster.name}) = ${item.productName.toLowerCase()}`)
-            .get();
+      const newChecked = !item.isChecked;
+      await db
+        .update(schema.purchaseItems)
+        .set({ isChecked: newChecked })
+        .where(eq(schema.purchaseItems.id, input.id));
 
-          const category = product?.category || item.category || 'Другое';
+      // ШефДом! Phase A: auto-add to inventory when checked
+      if (newChecked && item.productName) {
+        const [product] = await db
+          .select()
+          .from(schema.productMaster)
+          .where(sql`lower(${schema.productMaster.name}) = ${item.productName.toLowerCase()}`)
+          .limit(1);
 
-          // Smart storage like a professional chef:
-          // - Pantry: dry goods, grains, spices, canned, sauces, vegetables, fruits
-          // - Fridge: dairy, meat, fish, seafood, fresh herbs, eggs
-          // - Freezer: frozen items, ice cream
-          const PANTRY_CATEGORIES = [
-            'Бакалея', 'Крупы', 'Специи', 'Консервы', 'Соусы',
-            'Овощи', 'Фрукты', 'Другое',
-          ];
-          const FRIDGE_CATEGORIES = [
-            'Молочные', 'Мясо', 'Рыба', 'Морепродукты', 'Зелень', 'Яйца',
-          ];
-          const FREEZER_CATEGORIES = ['Заморозка'];
-          let storageType: string;
-          if (FRIDGE_CATEGORIES.includes(category)) {
-            storageType = 'fridge';
-          } else if (FREEZER_CATEGORIES.includes(category)) {
-            storageType = 'freezer';
-          } else {
-            storageType = 'pantry';
-          }
+        const category = product?.category || item.category || 'Другое';
 
-          db.insert(schema.inventory).values({
-            userId: 1,
-            productName: item.productName,
-            quantity: item.quantity || 1,
-            unit: item.unit || '',
-            storageType,
-            category,
-          }).run();
+        // Smart storage: vegetables/fruits to pantry, dairy/meat to fridge.
+        const PANTRY_CATEGORIES = [
+          'Бакалея', 'Крупы', 'Специи', 'Консервы', 'Соусы',
+          'Овощи', 'Фрукты', 'Другое',
+        ];
+        const FRIDGE_CATEGORIES = [
+          'Молочные', 'Мясо', 'Рыба', 'Морепродукты', 'Зелень', 'Яйца',
+        ];
+        const FREEZER_CATEGORIES = ['Заморозка'];
+        let storageType: string;
+        if (FRIDGE_CATEGORIES.includes(category)) {
+          storageType = 'fridge';
+        } else if (FREEZER_CATEGORIES.includes(category)) {
+          storageType = 'freezer';
+        } else {
+          storageType = 'pantry';
         }
 
-        // If unchecked, remove the last matching item from inventory
-        if (!newChecked && item.productName) {
-          const invItem = db.select().from(schema.inventory)
-            .where(sql`lower(${schema.inventory.productName}) = ${item.productName.toLowerCase()}`)
-            .limit(1)
-            .get();
-          if (invItem) {
-            db.delete(schema.inventory)
-              .where(eq(schema.inventory.id, invItem.id))
-              .run();
-          }
+        await db.insert(schema.inventory).values({
+          userId: 1,
+          productName: item.productName,
+          quantity: item.quantity || 1,
+          unit: item.unit || '',
+          storageType,
+          category,
+        });
+      }
+
+      // If unchecked, remove the last matching item from inventory
+      if (!newChecked && item.productName) {
+        const [invItem] = await db
+          .select()
+          .from(schema.inventory)
+          .where(sql`lower(${schema.inventory.productName}) = ${item.productName.toLowerCase()}`)
+          .limit(1);
+        if (invItem) {
+          await db.delete(schema.inventory).where(eq(schema.inventory.id, invItem.id));
         }
       }
       return { success: true };
@@ -124,21 +130,28 @@ export const shoppingRouter = router({
   remove: publicProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      db.delete(schema.purchaseItems).where(eq(schema.purchaseItems.id, input.id)).run();
+      await db.delete(schema.purchaseItems).where(eq(schema.purchaseItems.id, input.id));
       return { success: true };
     }),
 
   clearChecked: publicProcedure.mutation(async () => {
-    db.delete(schema.purchaseItems)
-      .where(eq(schema.purchaseItems.isChecked, true))
-      .run();
+    await db
+      .delete(schema.purchaseItems)
+      .where(eq(schema.purchaseItems.isChecked, true));
     return { success: true };
   }),
 
   getStats: publicProcedure.query(async () => {
-    const total = db.select({ count: sql<number>`count(*)` }).from(schema.purchaseItems).get();
-    const unchecked = db.select({ count: sql<number>`count(*)` }).from(schema.purchaseItems)
-      .where(eq(schema.purchaseItems.isChecked, false)).get();
-    return { total: total?.count || 0, unchecked: unchecked?.count || 0 };
+    const [totalRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.purchaseItems);
+    const [uncheckedRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.purchaseItems)
+      .where(eq(schema.purchaseItems.isChecked, false));
+    return {
+      total: totalRow?.count || 0,
+      unchecked: uncheckedRow?.count || 0,
+    };
   }),
 });

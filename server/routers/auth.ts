@@ -7,7 +7,11 @@ export const authRouter = router({
   login: publicProcedure
     .input(z.object({ pin: z.string().length(4) }))
     .mutation(async ({ input }) => {
-      const user = db.select().from(schema.users).where(eq(schema.users.pin, input.pin)).get();
+      const [user] = await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.pin, input.pin))
+        .limit(1);
       if (!user) {
         throw new Error('Неверный PIN-код');
       }
@@ -17,7 +21,11 @@ export const authRouter = router({
   getUser: publicProcedure
     .input(z.object({ userId: z.number() }))
     .query(async ({ input }) => {
-      const user = db.select().from(schema.users).where(eq(schema.users.id, input.userId)).get();
+      const [user] = await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, input.userId))
+        .limit(1);
       return user || null;
     }),
 });

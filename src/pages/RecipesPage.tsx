@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Search, Clock, Users, Import, Filter } from 'lucide-react';
+import { Plus, Search, Clock, Users, Import, Filter, FolderInput } from 'lucide-react';
 import { trpc } from '../utils/trpc';
+import SectionImportDialog from '../components/SectionImportDialog';
 
 export default function RecipesPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [showSectionImport, setShowSectionImport] = useState(false);
   const [importUrl, setImportUrl] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const navigate = useNavigate();
@@ -37,9 +39,18 @@ export default function RecipesPage() {
           <button
             onClick={() => setShowImport(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            title="Импортировать один рецепт по ссылке"
           >
             <Import className="w-4 h-4" />
             <span className="hidden sm:inline">Импорт</span>
+          </button>
+          <button
+            onClick={() => setShowSectionImport(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            title="Импортировать все рецепты из раздела/каталога одним заходом"
+          >
+            <FolderInput className="w-4 h-4" />
+            <span className="hidden sm:inline">Импорт раздела</span>
           </button>
           <Link
             to="/recipes/add"
@@ -188,6 +199,13 @@ export default function RecipesPage() {
             </div>
           </div>
         </div>
+      )}
+      {/* Bulk section import dialog */}
+      {showSectionImport && (
+        <SectionImportDialog
+          onClose={() => setShowSectionImport(false)}
+          onComplete={() => recipes.refetch()}
+        />
       )}
     </div>
   );

@@ -1,19 +1,20 @@
 import { z } from 'zod';
 import { router, publicProcedure } from '../trpc.js';
 import { db, schema } from '../db/index.js';
-import { eq, desc, sql, like, or } from 'drizzle-orm';
+import { eq, desc, sql, or } from 'drizzle-orm';
 import { ocrImage, parseReceiptText, isOcrConfigured } from '../services/ocr.js';
 import { translateBatch, isTranslatorConfigured } from '../services/translate.js';
 
 /**
- * Look up an existing product by NL name, RU name, or EN name (case-insensitive,
- * and an extra "starts with" pass for fuzziness like "Tomaten cherry" -> "Tomaten").
+ * Look up an existing product by NL name, RU name, or EN name. Two-pass:
+ * exact match first, then a "first-token starts with" fallback for fuzzy
+ * matches like "Tomaten cherry" -> "Tomaten".
  */
-function findMatchingProduct(name: string) {
+async function findMatchingProduct(name: string) {
   const norm = name.trim().toLowerCase();
   if (!norm) return null;
 
-  const exact = db
+  const [exact] = await db
     .select()
     .from(schema.productMaster)
     .where(
@@ -23,63 +24,53 @@ function findMatchingProduct(name: string) {
         sql`lower(${schema.productMaster.nameEn}) = ${norm}`,
       ),
     )
-    .get();
+    .limit(1);
   if (exact) return exact;
 
-  // Fuzzy: receipt token is a prefix of product name (or vice versa)
   const head = norm.split(/\s+/)[0];
   if (head.length < 3) return null;
-  const fuzzy = db
+  const headPattern = `${head}%`;
+  const [fuzzy] = await db
     .select()
     .from(schema.productMaster)
     .where(
       or(
-        like(sql`lower(${schema.productMaster.name})`, `${head}%`),
-        like(sql`lower(${schema.productMaster.nameNl})`, `${head}%`),
-        like(sql`lower(${schema.productMaster.nameEn})`, `${head}%`),
+        sql`lower(${schema.productMaster.name}) ILIKE ${headPattern}`,
+        sql`lower(${schema.productMaster.nameNl}) ILIKE ${headPattern}`,
+        sql`lower(${schema.productMaster.nameEn}) ILIKE ${headPattern}`,
       ),
     )
-    .get();
+    .limit(1);
   return fuzzy ?? null;
 }
 
 export const receiptsRouter = router({
-  /**
-   * Capability check for the UI: which optional integrations are configured.
-   * Lets the UI hide/disable buttons before the user tries to use them.
-   */
   capabilities: publicProcedure.query(async () => ({
     ocr: isOcrConfigured(),
     translation: isTranslatorConfigured(),
   })),
 
   list: publicProcedure.query(async () => {
-    return db.select().from(schema.receipts).orderBy(desc(schema.receipts.createdAt)).all();
+    return await db
+      .select()
+      .from(schema.receipts)
+      .orderBy(desc(schema.receipts.createdAt));
   }),
 
   getById: publicProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
-    const receipt = db
+    const [receipt] = await db
       .select()
       .from(schema.receipts)
       .where(eq(schema.receipts.id, input.id))
-      .get();
+      .limit(1);
     if (!receipt) return null;
-    const items = db
+    const items = await db
       .select()
       .from(schema.receiptItems)
-      .where(eq(schema.receiptItems.receiptId, input.id))
-      .all();
+      .where(eq(schema.receiptItems.receiptId, input.id));
     return { ...receipt, items };
   }),
 
-  /**
-   * Scan a base64-encoded receipt photo. The flow is:
-   *   1. Run OCR (if configured). If not, create an empty pending receipt.
-   *   2. Parse the OCR text into store/date/total + line items.
-   *   3. Translate Dutch product names to Russian (if configured).
-   *   4. Try to match each item to product_master.
-   *   5. Persist receipt + items with status='parsed'.
-   */
   scan: publicProcedure
     .input(
       z.object({
@@ -91,17 +82,16 @@ export const receiptsRouter = router({
       const ocr = await ocrImage(input.imageBase64, input.mimeType);
 
       if (!ocr.available) {
-        // Create empty receipt — user will fill it manually.
-        const r = db
+        const [{ id: receiptId }] = await db
           .insert(schema.receipts)
           .values({
             userId: 1,
             status: 'pending',
             currency: 'EUR',
           })
-          .run();
+          .returning({ id: schema.receipts.id });
         return {
-          receiptId: Number(r.lastInsertRowid),
+          receiptId,
           itemsCount: 0,
           ocrAvailable: false,
           translationAvailable: isTranslatorConfigured(),
@@ -111,7 +101,6 @@ export const receiptsRouter = router({
 
       const parsed = parseReceiptText(ocr.text);
 
-      // Translate names (Dutch -> Russian)
       let translatedNames: string[];
       if (parsed.items.length > 0 && isTranslatorConfigured()) {
         const results = await translateBatch(
@@ -124,8 +113,7 @@ export const receiptsRouter = router({
         translatedNames = parsed.items.map((i) => i.name);
       }
 
-      // Persist
-      const insertedReceipt = db
+      const [{ id: receiptId }] = await db
         .insert(schema.receipts)
         .values({
           userId: 1,
@@ -136,27 +124,25 @@ export const receiptsRouter = router({
           status: 'parsed',
           ocrProvider: ocr.provider,
         })
-        .run();
-      const receiptId = Number(insertedReceipt.lastInsertRowid);
+        .returning({ id: schema.receipts.id });
 
       for (let i = 0; i < parsed.items.length; i++) {
         const item = parsed.items[i];
         const ruName = translatedNames[i];
-        const matched = findMatchingProduct(ruName) ?? findMatchingProduct(item.name);
+        const matched =
+          (await findMatchingProduct(ruName)) ?? (await findMatchingProduct(item.name));
 
-        db.insert(schema.receiptItems)
-          .values({
-            receiptId,
-            productName: ruName,
-            originalName: item.name,
-            quantity: item.quantity ?? 1,
-            unit: item.unit ?? matched?.defaultUnit ?? null,
-            price: item.price,
-            currency: 'EUR',
-            matchedProductId: matched?.id ?? null,
-            wasAddedToInventory: false,
-          })
-          .run();
+        await db.insert(schema.receiptItems).values({
+          receiptId,
+          productName: ruName,
+          originalName: item.name,
+          quantity: item.quantity ?? 1,
+          unit: item.unit ?? matched?.defaultUnit ?? null,
+          price: item.price,
+          currency: 'EUR',
+          matchedProductId: matched?.id ?? null,
+          wasAddedToInventory: false,
+        });
       }
 
       return {
@@ -180,24 +166,20 @@ export const receiptsRouter = router({
     )
     .mutation(async ({ input }) => {
       const { id, ...patch } = input;
-      db.update(schema.receiptItems).set(patch).where(eq(schema.receiptItems.id, id)).run();
+      await db.update(schema.receiptItems).set(patch).where(eq(schema.receiptItems.id, id));
       return { success: true };
     }),
 
   deleteItem: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-    db.delete(schema.receiptItems).where(eq(schema.receiptItems.id, input.id)).run();
+    await db.delete(schema.receiptItems).where(eq(schema.receiptItems.id, input.id));
     return { success: true };
   }),
 
   delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-    db.delete(schema.receipts).where(eq(schema.receipts.id, input.id)).run();
+    await db.delete(schema.receipts).where(eq(schema.receipts.id, input.id));
     return { success: true };
   }),
 
-  /**
-   * Push everything from this receipt into inventory. Items already pushed
-   * (was_added_to_inventory) are skipped. Returns the count actually added.
-   */
   importToInventory: publicProcedure
     .input(
       z.object({
@@ -206,11 +188,10 @@ export const receiptsRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      const items = db
+      const items = await db
         .select()
         .from(schema.receiptItems)
-        .where(eq(schema.receiptItems.receiptId, input.receiptId))
-        .all();
+        .where(eq(schema.receiptItems.receiptId, input.receiptId));
 
       let added = 0;
       for (const item of items) {
@@ -218,35 +199,33 @@ export const receiptsRouter = router({
         if (!item.productName) continue;
 
         const matched = item.matchedProductId
-          ? db
+          ? (await db
               .select()
               .from(schema.productMaster)
               .where(eq(schema.productMaster.id, item.matchedProductId))
-              .get()
+              .limit(1))[0]
           : null;
 
-        db.insert(schema.inventory)
-          .values({
-            userId: 1,
-            productName: matched?.name ?? item.productName,
-            quantity: item.quantity ?? 1,
-            unit: item.unit ?? matched?.defaultUnit ?? null,
-            storageType: input.storageType,
-            category: matched?.category ?? null,
-          })
-          .run();
+        await db.insert(schema.inventory).values({
+          userId: 1,
+          productName: matched?.name ?? item.productName,
+          quantity: item.quantity ?? 1,
+          unit: item.unit ?? matched?.defaultUnit ?? null,
+          storageType: input.storageType,
+          category: matched?.category ?? null,
+        });
 
-        db.update(schema.receiptItems)
+        await db
+          .update(schema.receiptItems)
           .set({ wasAddedToInventory: true })
-          .where(eq(schema.receiptItems.id, item.id))
-          .run();
+          .where(eq(schema.receiptItems.id, item.id));
         added++;
       }
 
-      db.update(schema.receipts)
+      await db
+        .update(schema.receipts)
         .set({ status: 'imported' })
-        .where(eq(schema.receipts.id, input.receiptId))
-        .run();
+        .where(eq(schema.receipts.id, input.receiptId));
 
       return { added };
     }),

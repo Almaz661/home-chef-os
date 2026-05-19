@@ -2,61 +2,92 @@
 
 Приложение для управления домашней кухней: рецепты, меню недели, список покупок, инвентарь, справочник продуктов, **сканер чеков** (NL → RU + EUR → RUB).
 
-Стек: React 18 + Vite + tRPC + Drizzle ORM + SQLite (better-sqlite3) + Express.
+Стек: React 18 + Vite + tRPC + Drizzle ORM + **PostgreSQL (Neon)** + Express.
+
+> 💾 С версии 2.0 данные хранятся в PostgreSQL (Neon), а не в локальном
+> SQLite-файле. Это значит, что **рецепты переживают деплои** — больше
+> ничего не теряется при пересборке/перезапуске.
 
 ---
 
-## 🚀 Развернуть в один клик
+## 🚀 Развернуть
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Almaz661/home-chef-os)
+См. [DEPLOY.md](./DEPLOY.md) — там пошаговая инструкция для Render и Fly.io.
 
-После клика Render предложит зарегистрироваться (бесплатно, без карты), импортирует репозиторий и развернёт приложение по `render.yaml`. Через 3–5 минут получите ссылку. Войдите по PIN **1234**.
-
-> Бесплатный план Render засыпает после 15 минут простоя, и БД сбрасывается. Для постоянной работы — Fly.io (см. [DEPLOY.md](./DEPLOY.md)) или платный план Render ($7/мес).
+Кратко:
+1. Создайте проект на https://console.neon.tech (Free, без карты)
+2. Скопируйте «Pooled connection» строку
+3. Разверните на Render по `render.yaml`
+4. В Environment добавьте `DATABASE_URL` со скопированной строкой
+5. Manual Deploy → готово
 
 ---
 
-## Быстрый старт
+## Быстрый старт (локально)
 
-Требования: Node.js 20 или 22.
+Требования: Node.js 20 или 22 + PostgreSQL (Neon или локальный docker).
 
 ```bash
+cp .env.example .env
+# отредактируйте .env, поставьте DATABASE_URL
 npm install
-npm run db:seed   # создаст data/homechef.db и наполнит начальными данными
-npm run dev       # запустит фронт (http://localhost:5173) и API (http://localhost:3000)
+npm run db:seed   # применит миграции и заполнит начальный каталог продуктов
+npm run dev       # фронт на http://localhost:5173, API на http://localhost:3000
 ```
 
 PIN по умолчанию: **1234**.
+
+Локальный PostgreSQL для разработки:
+```bash
+docker run -d --name chefdom-pg \
+  -e POSTGRES_PASSWORD=dev -e POSTGRES_USER=dev -e POSTGRES_DB=chefdom \
+  -p 5432:5432 postgres:16
+
+# .env:
+# DATABASE_URL=postgres://dev:dev@localhost:5432/chefdom?sslmode=disable
+```
 
 ## Скрипты
 
 | Команда | Что делает |
 |---|---|
 | `npm run dev` | Параллельно поднимает Vite (фронт) и Express (API) с hot-reload |
-| `npm run build` | Собирает фронт в `dist/` и сервер в `dist-server/` |
-| `npm start` | Запускает прод-сборку (фронт раздаётся самим Express) |
-| `npm run db:migrate` | Применяет схему (создаёт таблицы, идемпотентно) |
-| `npm run db:seed` | Применяет схему и наполняет начальными данными |
-| `npm run db:reset` | Удаляет БД и пересоздаёт с нуля |
+| `npm run build` | Собирает фронт в `dist/` |
+| `npm start` | Сборка + запуск прод-сервера (фронт раздаётся Express) |
+| `npm run db:migrate` | Применяет схему PostgreSQL (идемпотентно) |
+| `npm run db:seed` | Применяет схему и сидит начальный каталог продуктов |
 | `npm run typecheck` | Проверяет типы фронта и сервера |
 | `npm test` | Запускает unit-тесты |
+
+## Импорт рецептов
+
+В разделе «Рецепты» три способа добавления:
+
+- **Добавить** — заполнить форму вручную
+- **Импорт** — вставить ссылку на один рецепт (Schema.org / microdata)
+- **Импорт раздела** — вставить ссылку на категорию-каталог
+  (`https://menunedeli.ru/.../salaty/`); сервер сам найдёт все рецепты,
+  включая пагинацию, и загрузит каждый по очереди с фотографиями. В
+  диалоге показывается прогресс и можно прервать.
 
 ## Структура
 
 ```
 home-chef-os/
 ├── src/                # Фронт (React)
-│   ├── pages/          # Страницы (по одной на маршрут)
-│   ├── components/     # Layout
-│   └── utils/trpc.ts   # tRPC клиент
+│   ├── pages/
+│   ├── components/
+│   └── utils/trpc.ts
 ├── server/             # Backend (Express + tRPC)
-│   ├── index.ts        # entrypoint, поднимает Express + миграции
-│   ├── trpc.ts         # tRPC builder и context
-│   ├── routers/        # _app.ts + 6 фич-роутеров
-│   └── db/             # schema, migrate, seed
-├── public/             # Статика (manifest.json, sw.js, favicon)
-├── data/               # SQLite файл (создаётся при первом запуске, в .gitignore)
-└── docs/               # Архитектурные документы и заметки
+│   ├── index.ts
+│   ├── trpc.ts
+│   ├── routers/
+│   ├── services/
+│   │   ├── recipeScraper.ts   # одиночный импорт
+│   │   └── sectionImport.ts   # массовый импорт раздела
+│   └── db/             # schema, migrate, seed (PostgreSQL)
+├── public/
+└── docs/
 ```
 
 ## Дорожная карта
