@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { router, publicProcedure } from '../trpc.js';
 import { db, schema } from '../db/index.js';
-import { eq, like, and, or, sql } from 'drizzle-orm';
+import { eq, ilike, and, or, sql, desc } from 'drizzle-orm';
+import { startSectionImport, getSectionImportStatus, listActiveImportJobs } from '../services/sectionImport.js';
 
 export const recipesRouter = router({
   list: publicProcedure
@@ -12,15 +13,15 @@ export const recipesRouter = router({
       maxTime: z.number().optional(),
     }).optional())
     .query(async ({ input }) => {
-      let query = db.select().from(schema.recipes);
       const conditions: any[] = [];
 
       if (input?.search) {
+        const term = `%${input.search}%`;
         conditions.push(
           or(
-            like(schema.recipes.title, `%${input.search}%`),
-            like(schema.recipes.description, `%${input.search}%`)
-          )
+            ilike(schema.recipes.title, term),
+            ilike(schema.recipes.description, term),
+          ),
         );
       }
       if (input?.category) {
@@ -30,15 +31,12 @@ export const recipesRouter = router({
         conditions.push(eq(schema.recipes.difficulty, input.difficulty));
       }
 
-      let results;
-      if (conditions.length > 0) {
-        results = db.select().from(schema.recipes).where(and(...conditions)).all();
-      } else {
-        results = db.select().from(schema.recipes).all();
-      }
+      let results = conditions.length > 0
+        ? await db.select().from(schema.recipes).where(and(...conditions)).orderBy(desc(schema.recipes.createdAt))
+        : await db.select().from(schema.recipes).orderBy(desc(schema.recipes.createdAt));
 
       if (input?.maxTime) {
-        results = results.filter(r => (r.totalTime || 999) <= input.maxTime!);
+        results = results.filter((r) => (r.totalTime || 999) <= input.maxTime!);
       }
 
       return results;
@@ -47,18 +45,24 @@ export const recipesRouter = router({
   getById: publicProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
-      const recipe = db.select().from(schema.recipes).where(eq(schema.recipes.id, input.id)).get();
+      const [recipe] = await db
+        .select()
+        .from(schema.recipes)
+        .where(eq(schema.recipes.id, input.id))
+        .limit(1);
       if (!recipe) return null;
 
-      const ingredients = db.select().from(schema.recipeIngredients)
+      const ingredients = await db
+        .select()
+        .from(schema.recipeIngredients)
         .where(eq(schema.recipeIngredients.recipeId, input.id))
-        .orderBy(schema.recipeIngredients.sortOrder)
-        .all();
+        .orderBy(schema.recipeIngredients.sortOrder);
 
-      const steps = db.select().from(schema.recipeSteps)
+      const steps = await db
+        .select()
+        .from(schema.recipeSteps)
         .where(eq(schema.recipeSteps.recipeId, input.id))
-        .orderBy(schema.recipeSteps.stepNumber)
-        .all();
+        .orderBy(schema.recipeSteps.stepNumber);
 
       return { ...recipe, ingredients, steps };
     }),
@@ -95,28 +99,34 @@ export const recipesRouter = router({
     .mutation(async ({ input }) => {
       const { ingredients, steps, ...recipeData } = input;
 
-      const result = db.insert(schema.recipes).values(recipeData).run();
-      const recipeId = Number(result.lastInsertRowid);
+      const [{ id: recipeId }] = await db
+        .insert(schema.recipes)
+        .values(recipeData)
+        .returning({ id: schema.recipes.id });
 
-      for (const ing of ingredients) {
-        db.insert(schema.recipeIngredients).values({
-          recipeId,
-          name: ing.name,
-          amount: ing.amount ?? null,
-          unit: ing.unit ?? null,
-          group: ing.group ?? null,
-          sortOrder: ing.sortOrder ?? 0,
-        }).run();
+      if (ingredients.length > 0) {
+        await db.insert(schema.recipeIngredients).values(
+          ingredients.map((ing) => ({
+            recipeId,
+            name: ing.name,
+            amount: ing.amount ?? null,
+            unit: ing.unit ?? null,
+            group: ing.group ?? null,
+            sortOrder: ing.sortOrder ?? 0,
+          })),
+        );
       }
 
-      for (const step of steps) {
-        db.insert(schema.recipeSteps).values({
-          recipeId,
-          stepNumber: step.stepNumber,
-          instruction: step.instruction,
-          imageUrl: step.imageUrl,
-          timerMinutes: step.timerMinutes,
-        }).run();
+      if (steps.length > 0) {
+        await db.insert(schema.recipeSteps).values(
+          steps.map((step) => ({
+            recipeId,
+            stepNumber: step.stepNumber,
+            instruction: step.instruction,
+            imageUrl: step.imageUrl ?? null,
+            timerMinutes: step.timerMinutes ?? null,
+          })),
+        );
       }
 
       return { id: recipeId };
@@ -125,7 +135,7 @@ export const recipesRouter = router({
   delete: publicProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      db.delete(schema.recipes).where(eq(schema.recipes.id, input.id)).run();
+      await db.delete(schema.recipes).where(eq(schema.recipes.id, input.id));
       return { success: true };
     }),
 
@@ -162,58 +172,75 @@ export const recipesRouter = router({
     .mutation(async ({ input }) => {
       const { id, ingredients, steps, ...recipeData } = input;
 
-      // Check existence
-      const existing = db.select().from(schema.recipes).where(eq(schema.recipes.id, id)).get();
+      const [existing] = await db
+        .select()
+        .from(schema.recipes)
+        .where(eq(schema.recipes.id, id))
+        .limit(1);
       if (!existing) {
         throw new Error('Рецепт не найден');
       }
 
-      db.update(schema.recipes).set({
-        ...recipeData,
-        updatedAt: sql`(datetime('now'))`,
-      }).where(eq(schema.recipes.id, id)).run();
+      await db
+        .update(schema.recipes)
+        .set({
+          ...recipeData,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(schema.recipes.id, id));
 
       // Replace ingredients and steps wholesale (the form sends the full list).
-      db.delete(schema.recipeIngredients).where(eq(schema.recipeIngredients.recipeId, id)).run();
-      db.delete(schema.recipeSteps).where(eq(schema.recipeSteps.recipeId, id)).run();
+      await db
+        .delete(schema.recipeIngredients)
+        .where(eq(schema.recipeIngredients.recipeId, id));
+      await db
+        .delete(schema.recipeSteps)
+        .where(eq(schema.recipeSteps.recipeId, id));
 
-      for (const ing of ingredients) {
-        db.insert(schema.recipeIngredients).values({
-          recipeId: id,
-          name: ing.name,
-          amount: ing.amount ?? null,
-          unit: ing.unit ?? null,
-          group: ing.group ?? null,
-          sortOrder: ing.sortOrder ?? 0,
-        }).run();
+      if (ingredients.length > 0) {
+        await db.insert(schema.recipeIngredients).values(
+          ingredients.map((ing) => ({
+            recipeId: id,
+            name: ing.name,
+            amount: ing.amount ?? null,
+            unit: ing.unit ?? null,
+            group: ing.group ?? null,
+            sortOrder: ing.sortOrder ?? 0,
+          })),
+        );
       }
 
-      for (const step of steps) {
-        db.insert(schema.recipeSteps).values({
-          recipeId: id,
-          stepNumber: step.stepNumber,
-          instruction: step.instruction,
-          imageUrl: step.imageUrl ?? null,
-          timerMinutes: step.timerMinutes ?? null,
-        }).run();
+      if (steps.length > 0) {
+        await db.insert(schema.recipeSteps).values(
+          steps.map((step) => ({
+            recipeId: id,
+            stepNumber: step.stepNumber,
+            instruction: step.instruction,
+            imageUrl: step.imageUrl ?? null,
+            timerMinutes: step.timerMinutes ?? null,
+          })),
+        );
       }
 
       return { id, success: true };
     }),
 
   getCategories: publicProcedure.query(async () => {
-    const results = db.selectDistinct({ category: schema.recipes.category })
+    const results = await db
+      .selectDistinct({ category: schema.recipes.category })
       .from(schema.recipes)
-      .where(sql`${schema.recipes.category} IS NOT NULL`)
-      .all();
-    return results.map(r => r.category).filter(Boolean) as string[];
+      .where(sql`${schema.recipes.category} IS NOT NULL`);
+    return results.map((r) => r.category).filter(Boolean) as string[];
   }),
 
   getStats: publicProcedure.query(async () => {
-    const count = db.select({ count: sql<number>`count(*)` }).from(schema.recipes).get();
-    return { total: count?.count || 0 };
+    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.recipes);
+    return { total: row?.count || 0 };
   }),
 
+  /**
+   * Import a single recipe by URL — unchanged behaviour from before.
+   */
   importFromUrl: publicProcedure
     .input(z.object({ url: z.string().url() }))
     .mutation(async ({ input }) => {
@@ -231,8 +258,7 @@ export const recipesRouter = router({
           `(${scraped.ingredients.length} ing, ${scraped.steps.length} steps)`,
       );
 
-      // Save to DB
-      const result = db
+      const [{ id: recipeId }] = await db
         .insert(schema.recipes)
         .values({
           title: scraped.title,
@@ -248,33 +274,29 @@ export const recipesRouter = router({
           cuisine: scraped.cuisine || null,
           difficulty: 'medium',
         })
-        .run();
+        .returning({ id: schema.recipes.id });
 
-      const recipeId = Number(result.lastInsertRowid);
-
-      for (let i = 0; i < scraped.ingredients.length; i++) {
-        const ing = scraped.ingredients[i];
-        if (!ing.name) continue;
-        db.insert(schema.recipeIngredients)
-          .values({
-            recipeId,
-            name: ing.name,
-            amount: ing.amount,
-            unit: ing.unit,
-            sortOrder: i + 1,
-          })
-          .run();
+      const ingredientRows = scraped.ingredients
+        .filter((ing) => ing.name)
+        .map((ing, i) => ({
+          recipeId,
+          name: ing.name,
+          amount: ing.amount,
+          unit: ing.unit,
+          sortOrder: i + 1,
+        }));
+      if (ingredientRows.length > 0) {
+        await db.insert(schema.recipeIngredients).values(ingredientRows);
       }
 
-      for (const step of scraped.steps) {
-        db.insert(schema.recipeSteps)
-          .values({
-            recipeId,
-            stepNumber: step.stepNumber,
-            instruction: step.instruction,
-            imageUrl: step.imageUrl || null,
-          })
-          .run();
+      const stepRows = scraped.steps.map((step) => ({
+        recipeId,
+        stepNumber: step.stepNumber,
+        instruction: step.instruction,
+        imageUrl: step.imageUrl || null,
+      }));
+      if (stepRows.length > 0) {
+        await db.insert(schema.recipeSteps).values(stepRows);
       }
 
       return {
@@ -284,5 +306,74 @@ export const recipesRouter = router({
         ingredientsCount: scraped.ingredients.length,
         stepsCount: scraped.steps.length,
       };
+    }),
+
+  /**
+   * Bulk import: kicks off a background job that scrapes all recipe links
+   * from a section/category page and imports each one. Returns a jobId
+   * the client polls via importSectionStatus for progress.
+   */
+  importSectionStart: publicProcedure
+    .input(
+      z.object({
+        url: z.string().url(),
+        /** Cap how many recipes to import in one job (safety net). */
+        limit: z.number().min(1).max(1000).default(500),
+        /** Politeness delay between recipe fetches, ms. */
+        delayMs: z.number().min(0).max(30000).default(2000),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const job = startSectionImport(input);
+      return { jobId: job.jobId };
+    }),
+
+  importSectionStatus: publicProcedure
+    .input(z.object({ jobId: z.string() }))
+    .query(async ({ input }) => {
+      const job = getSectionImportStatus(input.jobId);
+      if (!job) return null;
+      // Trim errors list size for transport.
+      return {
+        jobId: job.jobId,
+        url: job.url,
+        startedAt: job.startedAt,
+        finishedAt: job.finishedAt,
+        done: job.done,
+        cancelled: job.cancelled,
+        phase: job.phase,
+        total: job.total,
+        processed: job.processed,
+        success: job.success,
+        skipped: job.skipped,
+        failed: job.failed,
+        currentTitle: job.currentTitle,
+        currentUrl: job.currentUrl,
+        errors: job.errors.slice(-20),
+        recentlyAdded: job.recentlyAdded.slice(-10),
+      };
+    }),
+
+  importSectionList: publicProcedure.query(async () => {
+    const jobs = listActiveImportJobs();
+    return jobs.map((job) => ({
+      jobId: job.jobId,
+      url: job.url,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      done: job.done,
+      total: job.total,
+      processed: job.processed,
+      success: job.success,
+    }));
+  }),
+
+  importSectionCancel: publicProcedure
+    .input(z.object({ jobId: z.string() }))
+    .mutation(async ({ input }) => {
+      const job = getSectionImportStatus(input.jobId);
+      if (!job) throw new Error('Задача не найдена');
+      job.cancelled = true;
+      return { success: true };
     }),
 });

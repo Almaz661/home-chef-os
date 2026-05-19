@@ -17,9 +17,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 async function main() {
-  // Run migrations & seed on startup
   console.log('[server] Running migrations...');
-  runMigrations();
+  await runMigrations();
   console.log('[server] Running seed...');
   await runSeed();
 
@@ -29,12 +28,10 @@ async function main() {
   app.use(cookieParser());
   app.use(express.json({ limit: '10mb' }));
 
-  // Health check
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, env: NODE_ENV });
   });
 
-  // tRPC endpoint
   app.use(
     '/api/trpc',
     createExpressMiddleware({
@@ -43,10 +40,6 @@ async function main() {
     }),
   );
 
-  // In production, serve the built frontend.
-  //
-  // We try several candidate locations because the layout differs between
-  // running with tsx (server/index.ts) and a hypothetical compiled build.
   if (NODE_ENV === 'production') {
     const candidates = [
       path.resolve(process.cwd(), 'dist'),
@@ -66,13 +59,12 @@ async function main() {
       console.warn('[server] WARNING: frontend bundle not found in any of:');
       for (const p of candidates) console.warn(`  - ${p}`);
 
-      // Snapshot the FS at server start so we can render it on the diagnostic
-      // page. Lazily — only the immediate children of cwd, no recursion.
       const fs = await import('node:fs');
       let cwdListing = '';
       try {
         const cwd = process.cwd();
-        const entries = fs.readdirSync(cwd, { withFileTypes: true })
+        const entries = fs
+          .readdirSync(cwd, { withFileTypes: true })
           .map((d) => `${d.isDirectory() ? '📁' : '📄'} ${d.name}`)
           .join('\n');
         cwdListing = `<strong>${cwd}:</strong>\n${entries}`;

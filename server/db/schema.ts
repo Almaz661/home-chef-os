@@ -1,15 +1,24 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { pgTable, text, integer, serial, real, boolean, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
-export const users = sqliteTable('users', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+/**
+ * PostgreSQL schema (Neon). All timestamps use `timestamptz` so we don't
+ * have to worry about deployment timezone drift.
+ *
+ * Date-only fields (expiry_date, week_start_date, receipt date) stay as
+ * plain text in `YYYY-MM-DD` form so they sort lexicographically and the
+ * existing string-based comparisons keep working.
+ */
+
+export const users = pgTable('users', {
+  id: serial('id').primaryKey(),
   pin: text('pin').notNull(),
   name: text('name').notNull(),
-  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
-export const recipes = sqliteTable('recipes', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const recipes = pgTable('recipes', {
+  id: serial('id').primaryKey(),
   title: text('title').notNull(),
   description: text('description'),
   imageUrl: text('image_url'),
@@ -23,12 +32,12 @@ export const recipes = sqliteTable('recipes', {
   cuisine: text('cuisine'),
   difficulty: text('difficulty').default('medium'),
   calories: integer('calories'),
-  createdAt: text('created_at').default(sql`(datetime('now'))`),
-  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
 
-export const recipeIngredients = sqliteTable('recipe_ingredients', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const recipeIngredients = pgTable('recipe_ingredients', {
+  id: serial('id').primaryKey(),
   recipeId: integer('recipe_id').notNull().references(() => recipes.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   amount: real('amount'),
@@ -37,8 +46,8 @@ export const recipeIngredients = sqliteTable('recipe_ingredients', {
   sortOrder: integer('sort_order').default(0),
 });
 
-export const recipeSteps = sqliteTable('recipe_steps', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const recipeSteps = pgTable('recipe_steps', {
+  id: serial('id').primaryKey(),
   recipeId: integer('recipe_id').notNull().references(() => recipes.id, { onDelete: 'cascade' }),
   stepNumber: integer('step_number').notNull(),
   instruction: text('instruction').notNull(),
@@ -46,15 +55,15 @@ export const recipeSteps = sqliteTable('recipe_steps', {
   timerMinutes: integer('timer_minutes'),
 });
 
-export const menus = sqliteTable('menus', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const menus = pgTable('menus', {
+  id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => users.id),
   weekStartDate: text('week_start_date').notNull(),
-  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
-export const menuItems = sqliteTable('menu_items', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const menuItems = pgTable('menu_items', {
+  id: serial('id').primaryKey(),
   menuId: integer('menu_id').notNull().references(() => menus.id, { onDelete: 'cascade' }),
   dayOfWeek: integer('day_of_week').notNull(),
   mealType: text('meal_type').notNull(),
@@ -62,8 +71,8 @@ export const menuItems = sqliteTable('menu_items', {
   recipeId: integer('recipe_id').references(() => recipes.id),
 });
 
-export const inventory = sqliteTable('inventory', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const inventory = pgTable('inventory', {
+  id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => users.id),
   productName: text('product_name').notNull(),
   quantity: real('quantity').default(1),
@@ -72,27 +81,27 @@ export const inventory = sqliteTable('inventory', {
   expiryDate: text('expiry_date'),
   minQuantity: real('min_quantity'),
   category: text('category'),
-  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
 
-export const purchaseItems = sqliteTable('purchase_items', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const purchaseItems = pgTable('purchase_items', {
+  id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => users.id),
   productName: text('product_name').notNull(),
   quantity: real('quantity').default(1),
   unit: text('unit'),
   category: text('category'),
-  isChecked: integer('is_checked', { mode: 'boolean' }).default(false),
+  isChecked: boolean('is_checked').default(false),
   recipeSource: text('recipe_source'),
   /** How much the recipes called for, before subtracting stock. */
   neededQuantity: real('needed_quantity'),
   /** How much was already at home (subtracted from `quantity`). */
   inStockQuantity: real('in_stock_quantity').default(0),
-  addedAt: text('added_at').default(sql`(datetime('now'))`),
+  addedAt: timestamp('added_at', { withTimezone: true }).defaultNow(),
 });
 
-export const productMaster = sqliteTable('product_master', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const productMaster = pgTable('product_master', {
+  id: serial('id').primaryKey(),
   name: text('name').notNull(),
   /** Dutch name, used to match products when scanning Dutch receipts. */
   nameNl: text('name_nl'),
@@ -102,14 +111,14 @@ export const productMaster = sqliteTable('product_master', {
   category: text('category'),
 });
 
-export const productAliases = sqliteTable('product_aliases', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const productAliases = pgTable('product_aliases', {
+  id: serial('id').primaryKey(),
   productId: integer('product_id').notNull().references(() => productMaster.id, { onDelete: 'cascade' }),
   alias: text('alias').notNull(),
 });
 
-export const receipts = sqliteTable('receipts', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const receipts = pgTable('receipts', {
+  id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => users.id),
   storeName: text('store_name'),
   date: text('date'),
@@ -120,11 +129,11 @@ export const receipts = sqliteTable('receipts', {
   status: text('status').default('pending'),
   /** which OCR provider produced the items, if any */
   ocrProvider: text('ocr_provider'),
-  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
-export const receiptItems = sqliteTable('receipt_items', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const receiptItems = pgTable('receipt_items', {
+  id: serial('id').primaryKey(),
   receiptId: integer('receipt_id').notNull().references(() => receipts.id, { onDelete: 'cascade' }),
   /** Russian display name (after translation, if any). */
   productName: text('product_name').notNull(),
@@ -137,25 +146,34 @@ export const receiptItems = sqliteTable('receipt_items', {
   /** Linked product_master id (after auto-match or user confirmation). */
   matchedProductId: integer('matched_product_id').references(() => productMaster.id),
   /** Has the user already pushed this row into inventory? */
-  wasAddedToInventory: integer('was_added_to_inventory', { mode: 'boolean' }).default(false),
+  wasAddedToInventory: boolean('was_added_to_inventory').default(false),
 });
 
 /** Cached FX rates so we don't call the upstream API on every page load. */
-export const exchangeRates = sqliteTable('exchange_rates', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const exchangeRates = pgTable('exchange_rates', {
+  id: serial('id').primaryKey(),
   base: text('base').notNull(),
   quote: text('quote').notNull(),
   rate: real('rate').notNull(),
-  fetchedAt: text('fetched_at').notNull().default(sql`(datetime('now'))`),
-});
-
-
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  baseQuoteIdx: uniqueIndex('exchange_rates_base_quote_idx').on(t.base, t.quote),
+}));
 
 /** ШефДом! Phase A — cooking history log */
-export const cookingHistory = sqliteTable('cooking_history', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const cookingHistory = pgTable('cooking_history', {
+  id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => users.id),
   recipeId: integer('recipe_id').references(() => recipes.id, { onDelete: 'set null' }),
   servings: integer('servings'),
-  cookedAt: text('cooked_at').default(sql`(datetime('now'))`),
+  cookedAt: timestamp('cooked_at', { withTimezone: true }).defaultNow(),
 });
+
+/** Internal: schema migration tracking */
+export const schemaMigrations = pgTable('schema_migrations', {
+  version: integer('version').primaryKey(),
+  appliedAt: timestamp('applied_at', { withTimezone: true }).defaultNow(),
+});
+
+// Re-export for callers that want raw SQL constructs
+export { sql };

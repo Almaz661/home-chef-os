@@ -1,21 +1,27 @@
 import { z } from 'zod';
 import { router, publicProcedure } from '../trpc.js';
 import { db, schema } from '../db/index.js';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 export const inventoryRouter = router({
   list: publicProcedure
     .input(z.object({ storageType: z.string().optional() }).optional())
     .query(async ({ input }) => {
       if (input?.storageType) {
-        return db.select().from(schema.inventory)
+        return await db
+          .select()
+          .from(schema.inventory)
           .where(eq(schema.inventory.storageType, input.storageType))
-          .orderBy(schema.inventory.category, schema.inventory.productName)
-          .all();
+          .orderBy(schema.inventory.category, schema.inventory.productName);
       }
-      return db.select().from(schema.inventory)
-        .orderBy(schema.inventory.storageType, schema.inventory.category, schema.inventory.productName)
-        .all();
+      return await db
+        .select()
+        .from(schema.inventory)
+        .orderBy(
+          schema.inventory.storageType,
+          schema.inventory.category,
+          schema.inventory.productName,
+        );
     }),
 
   add: publicProcedure
@@ -31,23 +37,28 @@ export const inventoryRouter = router({
     .mutation(async ({ input }) => {
       let category = input.category;
       if (!category) {
-        const product = db.select().from(schema.productMaster)
+        const [product] = await db
+          .select()
+          .from(schema.productMaster)
           .where(sql`lower(${schema.productMaster.name}) = ${input.productName.toLowerCase()}`)
-          .get();
+          .limit(1);
         category = product?.category || 'Другое';
       }
 
-      const result = db.insert(schema.inventory).values({
-        userId: 1,
-        productName: input.productName,
-        quantity: input.quantity || 1,
-        unit: input.unit || '',
-        storageType: input.storageType,
-        expiryDate: input.expiryDate || null,
-        minQuantity: input.minQuantity || null,
-        category,
-      }).run();
-      return { id: Number(result.lastInsertRowid) };
+      const [{ id }] = await db
+        .insert(schema.inventory)
+        .values({
+          userId: 1,
+          productName: input.productName,
+          quantity: input.quantity || 1,
+          unit: input.unit || '',
+          storageType: input.storageType,
+          expiryDate: input.expiryDate || null,
+          minQuantity: input.minQuantity || null,
+          category,
+        })
+        .returning({ id: schema.inventory.id });
+      return { id };
     }),
 
   update: publicProcedure
@@ -63,35 +74,44 @@ export const inventoryRouter = router({
     }))
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
-      const updateData: any = { ...data, updatedAt: sql`(datetime('now'))` };
-      // Remove undefined values
-      Object.keys(updateData).forEach(key => {
+      const updateData: Record<string, unknown> = { ...data, updatedAt: sql`now()` };
+      Object.keys(updateData).forEach((key) => {
         if (updateData[key] === undefined) delete updateData[key];
       });
-      db.update(schema.inventory).set(updateData).where(eq(schema.inventory.id, id)).run();
+      await db.update(schema.inventory).set(updateData).where(eq(schema.inventory.id, id));
       return { success: true };
     }),
 
   remove: publicProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      db.delete(schema.inventory).where(eq(schema.inventory.id, input.id)).run();
+      await db.delete(schema.inventory).where(eq(schema.inventory.id, input.id));
       return { success: true };
     }),
 
   getStats: publicProcedure.query(async () => {
-    const total = db.select({ count: sql<number>`count(*)` }).from(schema.inventory).get();
-    const fridge = db.select({ count: sql<number>`count(*)` }).from(schema.inventory)
-      .where(eq(schema.inventory.storageType, 'fridge')).get();
-    const freezer = db.select({ count: sql<number>`count(*)` }).from(schema.inventory)
-      .where(eq(schema.inventory.storageType, 'freezer')).get();
-    const pantry = db.select({ count: sql<number>`count(*)` }).from(schema.inventory)
-      .where(eq(schema.inventory.storageType, 'pantry')).get();
+    const [total] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.inventory);
+    const [fridge] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.inventory)
+      .where(eq(schema.inventory.storageType, 'fridge'));
+    const [freezer] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.inventory)
+      .where(eq(schema.inventory.storageType, 'freezer'));
+    const [pantry] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.inventory)
+      .where(eq(schema.inventory.storageType, 'pantry'));
 
-    // Count expiring soon (within 3 days)
-    const expiringSoon = db.select({ count: sql<number>`count(*)` }).from(schema.inventory)
-      .where(sql`${schema.inventory.expiryDate} IS NOT NULL AND ${schema.inventory.expiryDate} <= date('now', '+3 days')`)
-      .get();
+    // Items expiring within 3 days. expiry_date is YYYY-MM-DD text.
+    const [expiringSoon] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.inventory)
+      .where(
+        sql`${schema.inventory.expiryDate} IS NOT NULL
+            AND ${schema.inventory.expiryDate} <= to_char(current_date + interval '3 days', 'YYYY-MM-DD')`,
+      );
 
     return {
       total: total?.count || 0,

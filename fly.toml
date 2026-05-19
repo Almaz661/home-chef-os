@@ -1,12 +1,11 @@
-# Fly.io configuration. Bесплатный тариф предоставляет persistent volume
-# (3GB), что идеально для SQLite. Требует регистрации с банковской
-# картой (но free tier без списаний при умеренном трафике).
+# Fly.io configuration. Database — внешний Neon PostgreSQL (DATABASE_URL),
+# поэтому persistent volume больше не нужен.
 #
 # Setup (один раз):
 #   curl -L https://fly.io/install.sh | sh
 #   flyctl auth signup
-#   flyctl launch --no-deploy        # принимает параметры из этого файла
-#   flyctl volumes create homechef_data --region ams --size 1
+#   flyctl launch --no-deploy
+#   flyctl secrets set DATABASE_URL='postgres://...?sslmode=require'
 #   flyctl secrets set OCR_SPACE_API_KEY=...   # опционально
 #   flyctl secrets set DEEPL_API_KEY=...       # опционально
 #   flyctl deploy
@@ -20,11 +19,6 @@ primary_region = "ams"
 [env]
   NODE_ENV = "production"
   PORT = "3000"
-  DB_PATH = "/var/data/homechef.db"
-
-[[mounts]]
-  source = "homechef_data"
-  destination = "/var/data"
 
 [http_service]
   internal_port = 3000

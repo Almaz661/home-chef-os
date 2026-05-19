@@ -3,11 +3,6 @@ import { and, eq, sql } from 'drizzle-orm';
 
 const CACHE_TTL_HOURS = 24;
 
-/**
- * Fetch a fresh rate from a public, no-key API.
- * Primary: Frankfurter (ECB rates). Fallback: open.er-api.com.
- * Both are free and don't need an API key. If both fail, throws.
- */
 async function fetchRateFromUpstream(base: string, quote: string): Promise<number> {
   // Frankfurter
   try {
@@ -38,46 +33,45 @@ async function fetchRateFromUpstream(base: string, quote: string): Promise<numbe
   throw new Error(`Не удалось получить курс ${base}→${quote} ни от одного провайдера`);
 }
 
-/**
- * Get rate for `base → quote`, using a 24h DB cache.
- * Always returns a positive number, or throws if everything fails AND there's no cache.
- */
 export async function getRate(base: string, quote: string): Promise<{
   rate: number;
   fetchedAt: string;
   source: 'cache' | 'upstream';
 }> {
-  const cached = db
+  const [cached] = await db
     .select()
     .from(schema.exchangeRates)
     .where(and(eq(schema.exchangeRates.base, base), eq(schema.exchangeRates.quote, quote)))
-    .get();
+    .limit(1);
+
+  const fetchedAtIso = (d: Date | string | null | undefined) =>
+    d instanceof Date ? d.toISOString() : (d ?? new Date().toISOString());
 
   if (cached) {
-    const ageMs = Date.now() - new Date(cached.fetchedAt + 'Z').getTime();
+    const fetchedAt = cached.fetchedAt instanceof Date ? cached.fetchedAt : new Date(cached.fetchedAt as any);
+    const ageMs = Date.now() - fetchedAt.getTime();
     if (ageMs < CACHE_TTL_HOURS * 3600 * 1000) {
-      return { rate: cached.rate, fetchedAt: cached.fetchedAt, source: 'cache' };
+      return { rate: cached.rate, fetchedAt: fetchedAtIso(cached.fetchedAt), source: 'cache' };
     }
   }
 
   try {
     const rate = await fetchRateFromUpstream(base, quote);
-    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const now = new Date().toISOString();
 
     if (cached) {
-      db.update(schema.exchangeRates)
-        .set({ rate, fetchedAt: sql`(datetime('now'))` })
-        .where(eq(schema.exchangeRates.id, cached.id))
-        .run();
+      await db
+        .update(schema.exchangeRates)
+        .set({ rate, fetchedAt: sql`now()` })
+        .where(eq(schema.exchangeRates.id, cached.id));
     } else {
-      db.insert(schema.exchangeRates).values({ base, quote, rate }).run();
+      await db.insert(schema.exchangeRates).values({ base, quote, rate });
     }
 
     return { rate, fetchedAt: now, source: 'upstream' };
   } catch (err) {
-    // Upstream failed — return stale cache if we have one, otherwise rethrow.
     if (cached) {
-      return { rate: cached.rate, fetchedAt: cached.fetchedAt, source: 'cache' };
+      return { rate: cached.rate, fetchedAt: fetchedAtIso(cached.fetchedAt), source: 'cache' };
     }
     throw err;
   }

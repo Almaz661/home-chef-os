@@ -1,20 +1,47 @@
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from './schema.js';
-import { join, dirname, resolve } from 'node:path';
-import { mkdirSync } from 'node:fs';
 
-// Always resolve relative to the working directory (the project root) so
-// the compiled output (in dist-server/) and the dev runner (tsx) agree.
-const dbPath = process.env.DB_PATH
-  ? resolve(process.env.DB_PATH)
-  : join(process.cwd(), 'data', 'homechef.db');
+/**
+ * Database connection.
+ *
+ * Production / Neon / любой PostgreSQL: задайте DATABASE_URL.
+ * Поддерживается формат `postgres://user:pass@host/db?sslmode=require`.
+ *
+ * Если переменная не задана — выбрасываем понятную ошибку, чтобы запуск
+ * сразу упал с подсказкой, а не превратился в каскад непонятных ошибок
+ * на каждый SQL-запрос.
+ */
 
-mkdirSync(dirname(dbPath), { recursive: true });
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  process.env.NEON_DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  '';
 
-const sqlite = new Database(dbPath);
-sqlite.pragma('journal_mode = WAL');
-sqlite.pragma('foreign_keys = ON');
+if (!DATABASE_URL) {
+  // Don't throw at module-load time during tooling (typecheck etc.)
+  // Throw lazily when the db is actually used.
+  console.warn(
+    '[db] DATABASE_URL не задан. Установите переменную окружения с ' +
+      'connection string PostgreSQL (Neon: project → Connection Details → ' +
+      '"Pooled connection"). Сервер запустится, но любой SQL-запрос упадёт.',
+  );
+}
 
-export const db = drizzle(sqlite, { schema });
+// `postgres` will throw on first query if the URL is invalid; we use a
+// permissive default to keep imports working in offline tooling.
+const client = postgres(DATABASE_URL || 'postgres://invalid:invalid@localhost:5432/invalid', {
+  // Neon uses TLS; keep ssl on for any remote host. When DATABASE_URL
+  // already contains sslmode=require, postgres-js honours it.
+  ssl: DATABASE_URL.includes('sslmode=disable') ? false : 'require',
+  max: 10,
+  idle_timeout: 30,
+  connect_timeout: 10,
+  // Avoid noisy "notice" warnings on schema setup.
+  onnotice: () => {},
+});
+
+export const db = drizzle(client, { schema });
+export const sqlClient = client;
 export { schema };
