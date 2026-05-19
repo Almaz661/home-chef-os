@@ -74,14 +74,25 @@ export const shoppingRouter = router({
 
           const category = product?.category || item.category || 'Другое';
 
-          // Smart storage: pantry items go to pantry, perishables to fridge
-          const PANTRY_CATEGORIES = ['Бакалея', 'Крупы', 'Специи', 'Консервы', 'Соусы', 'Другое'];
+          // Smart storage like a professional chef:
+          // - Pantry: dry goods, grains, spices, canned, sauces, vegetables, fruits
+          // - Fridge: dairy, meat, fish, seafood, fresh herbs, eggs
+          // - Freezer: frozen items, ice cream
+          const PANTRY_CATEGORIES = [
+            'Бакалея', 'Крупы', 'Специи', 'Консервы', 'Соусы',
+            'Овощи', 'Фрукты', 'Другое',
+          ];
+          const FRIDGE_CATEGORIES = [
+            'Молочные', 'Мясо', 'Рыба', 'Морепродукты', 'Зелень', 'Яйца',
+          ];
           const FREEZER_CATEGORIES = ['Заморозка'];
-          let storageType: string = 'fridge';
-          if (PANTRY_CATEGORIES.includes(category)) {
-            storageType = 'pantry';
+          let storageType: string;
+          if (FRIDGE_CATEGORIES.includes(category)) {
+            storageType = 'fridge';
           } else if (FREEZER_CATEGORIES.includes(category)) {
             storageType = 'freezer';
+          } else {
+            storageType = 'pantry';
           }
 
           db.insert(schema.inventory).values({
