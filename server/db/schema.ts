@@ -148,3 +148,14 @@ export const exchangeRates = sqliteTable('exchange_rates', {
   rate: real('rate').notNull(),
   fetchedAt: text('fetched_at').notNull().default(sql`(datetime('now'))`),
 });
+
+
+
+/** ШефДом! Phase A — cooking history log */
+export const cookingHistory = sqliteTable('cooking_history', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').references(() => users.id),
+  recipeId: integer('recipe_id').references(() => recipes.id, { onDelete: 'set null' }),
+  servings: integer('servings'),
+  cookedAt: text('cooked_at').default(sql`(datetime('now'))`),
+});

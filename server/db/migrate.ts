@@ -174,10 +174,24 @@ CREATE TABLE IF NOT EXISTS exchange_rates (
 );
 `;
 
+// V4: ШефДом! Phase A — cooking history
+const SCHEMA_V4 = `
+CREATE TABLE IF NOT EXISTS cooking_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id),
+  recipe_id INTEGER REFERENCES recipes(id) ON DELETE SET NULL,
+  servings INTEGER,
+  cooked_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cooking_history_recipe ON cooking_history(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_cooking_history_date ON cooking_history(cooked_at);
+`;
+
 const MIGRATIONS: Array<{ version: number; sql: string }> = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
   { version: 3, sql: SCHEMA_V3 },
+  { version: 4, sql: SCHEMA_V4 },
 ];
 
 export function runMigrations() {

@@ -48,6 +48,19 @@ export default function MenuPage() {
   const removeItemMutation = trpc.menu.removeItem.useMutation({
     onSuccess: () => weekData.refetch(),
   });
+  const cookMutation = trpc.cooking.cook.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        toasts.push(`${data.recipeTitle} — приготовлено! Ингредиенты списаны.`, 'success');
+      } else {
+        const missingList = data.missing.map(m => `${m.name} (нужно ${m.needed} ${m.unit}, есть ${m.have})`).join(', ');
+        toasts.push(`Не хватает: ${missingList}. Остальное списано.`, 'info');
+      }
+    },
+    onError: (err) => {
+      toasts.push(err.message || 'Не удалось приготовить', 'error');
+    },
+  });
   const generateShoppingMutation = trpc.menu.generateShoppingList.useMutation({
     onSuccess: (data) => {
       // Invalidate shopping.list and getStats so other pages refetch
@@ -72,6 +85,12 @@ export default function MenuPage() {
     const d = new Date(currentWeek);
     d.setDate(d.getDate() - 7);
     setCurrentWeek(d);
+  };
+
+  const handleCook = (recipeId: number) => {
+    if (confirm('Приготовить? Ингредиенты будут списаны из инвентаря.')) {
+      cookMutation.mutate({ recipeId, servingsMultiplier: 1 });
+    }
   };
 
   const nextWeek = () => {
@@ -186,6 +205,14 @@ export default function MenuPage() {
                               <span className="flex-1 text-primary-800 font-medium line-clamp-3 leading-snug">
                                 {item.recipe?.title || 'Рецепт'}
                               </span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleCook(item.recipeId!); }}
+                                className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-green-500 hover:bg-green-100 rounded transition-colors"
+                                aria-label="Приготовить"
+                                title="Приготовить"
+                              >
+                                🍳
+                              </button>
                               <button
                                 onClick={() => removeItemMutation.mutate({ id: item.id })}
                                 className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-primary-400 hover:bg-red-100 hover:text-red-600 rounded transition-colors"

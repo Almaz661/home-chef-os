@@ -59,10 +59,41 @@ export const shoppingRouter = router({
         .where(eq(schema.purchaseItems.id, input.id))
         .get();
       if (item) {
+        const newChecked = !item.isChecked;
         db.update(schema.purchaseItems)
-          .set({ isChecked: !item.isChecked })
+          .set({ isChecked: newChecked })
           .where(eq(schema.purchaseItems.id, input.id))
           .run();
+
+        // ШефДом! Phase A: auto-add to inventory when checked
+        if (newChecked && item.productName) {
+          // Look up category from product master
+          const product = db.select().from(schema.productMaster)
+            .where(sql`lower(${schema.productMaster.name}) = ${item.productName.toLowerCase()}`)
+            .get();
+
+          db.insert(schema.inventory).values({
+            userId: 1,
+            productName: item.productName,
+            quantity: item.quantity || 1,
+            unit: item.unit || '',
+            storageType: 'fridge',
+            category: product?.category || item.category || 'Другое',
+          }).run();
+        }
+
+        // If unchecked, remove the last matching item from inventory
+        if (!newChecked && item.productName) {
+          const invItem = db.select().from(schema.inventory)
+            .where(sql`lower(${schema.inventory.productName}) = ${item.productName.toLowerCase()}`)
+            .limit(1)
+            .get();
+          if (invItem) {
+            db.delete(schema.inventory)
+              .where(eq(schema.inventory.id, invItem.id))
+              .run();
+          }
+        }
       }
       return { success: true };
     }),
