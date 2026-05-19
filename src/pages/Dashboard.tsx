@@ -7,6 +7,7 @@ export default function Dashboard() {
   const shoppingStats = trpc.shopping.getStats.useQuery();
   const inventoryStats = trpc.inventory.getStats.useQuery();
   const productStats = trpc.products.getStats.useQuery();
+  const cookingStats = trpc.cooking.stats.useQuery({ days: 30 });
 
   const recentRecipes = trpc.recipes.list.useQuery({});
 
