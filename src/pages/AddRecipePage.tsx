@@ -297,11 +297,35 @@ export default function AddRecipePage() {
               />
             </div>
 
-            {/* Photo URL with preview */}
+            {/* Photo URL with preview.
+               In edit mode (or whenever a URL is set), show a large hero
+               preview above the input so the user sees what photo is
+               currently attached without squinting at a thumbnail. */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Фото (URL картинки)
               </label>
+
+              {imageUrl && (
+                <div className="mb-3 aspect-[16/9] w-full rounded-xl overflow-hidden bg-gradient-to-br from-primary-100 to-primary-50 border border-gray-100 relative">
+                  <img
+                    src={imageUrl}
+                    alt="Текущее фото рецепта"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Picture didn't load — hide it but keep the URL
+                      // input so the user can fix the link.
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  {isEditing && (
+                    <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 text-white text-xs rounded">
+                      Текущее фото
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-3 items-start">
                 <input
                   type="text"
@@ -310,21 +334,17 @@ export default function AddRecipePage() {
                   className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="https://..."
                 />
-                <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {imageUrl ? (
-                    <img
-                      src={imageUrl}
-                      alt="Превью"
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  ) : (
+                {!imageUrl && (
+                  <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center overflow-hidden flex-shrink-0">
                     <ImageIcon className="w-6 h-6 text-primary-300" />
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
+              {imageUrl && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Чтобы заменить фото — отредактируйте ссылку выше или удалите её
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
